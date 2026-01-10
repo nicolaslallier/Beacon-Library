@@ -1,0 +1,15 @@
+# Dev environment can further override or extend the base config as needed
+services:
+  backend:
+    environment:
+      ENV: dev
+      # Add other dev-specific env variables here
+  frontend:
+    environment:
+      ENV: dev
+      # Add other dev-specific env variables here
+  postgres:
+    environment:
+      POSTGRES_DB: beacon_library
+      POSTGRES_USER: beacon_user
+      POSTGRES_PASSWORD: beacon_password

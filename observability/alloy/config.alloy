@@ -1,0 +1,99 @@
+// Grafana Alloy configuration for metrics scraping and OTLP trace collection
+// Sends metrics to Prometheus and traces to Tempo
+//
+// Environment variables are passed via docker-compose:
+//   TEMPO_URL        - Tempo OTLP endpoint (e.g., tempo.beacon.famillallier.net:4317)
+//   PROMETHEUS_URL   - Prometheus remote_write endpoint (e.g., http://prometheus.beacon.famillallier.net:9090)
+//   ENV              - Environment label (local, dev, ppe, prod)
+
+// =============================================================================
+// OTLP Receiver - Receives traces from instrumented applications
+// =============================================================================
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+// =============================================================================
+// Batch Processor - Batches traces before export for efficiency
+// =============================================================================
+otelcol.processor.batch "default" {
+  timeout = "5s"
+  send_batch_size = 1000
+
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+// =============================================================================
+// OTLP Exporter - Sends traces to Tempo
+// Uses TEMPO_ENDPOINT env var set in docker-compose
+// =============================================================================
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = sys.env("TEMPO_ENDPOINT")
+    tls {
+      insecure = true
+    }
+  }
+}
+
+// =============================================================================
+// Prometheus Scrape - cAdvisor container metrics
+// =============================================================================
+prometheus.scrape "cadvisor" {
+  targets = [{
+    __address__ = "cadvisor:8080",
+  }]
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  scrape_interval = "15s"
+  metrics_path = "/metrics"
+}
+
+// =============================================================================
+// Prometheus Scrape - Backend application metrics
+// =============================================================================
+prometheus.scrape "backend" {
+  targets = [{
+    __address__ = "backend:8000",
+  }]
+  forward_to = [prometheus.relabel.add_labels.receiver]
+  scrape_interval = "15s"
+  metrics_path = "/metrics"
+}
+
+// =============================================================================
+// Relabeling - Add standard labels to all metrics
+// =============================================================================
+prometheus.relabel "add_labels" {
+  forward_to = [prometheus.remote_write.prometheus.receiver]
+
+  rule {
+    target_label = "env"
+    replacement  = sys.env("ENV_LABEL")
+  }
+
+  rule {
+    target_label = "compose_project"
+    replacement  = "beacon-library"
+  }
+}
+
+// =============================================================================
+// Remote Write - Send metrics to Prometheus
+// Uses PROMETHEUS_WRITE_URL env var set in docker-compose
+// =============================================================================
+prometheus.remote_write "prometheus" {
+  endpoint {
+    url = sys.env("PROMETHEUS_WRITE_URL")
+  }
+}

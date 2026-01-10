@@ -1,0 +1,1 @@
+"""Beacon Library Backend Application."""
