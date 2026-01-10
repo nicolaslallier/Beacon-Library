@@ -32,6 +32,23 @@ services:
     networks:
       - beacon-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: beacon-library-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - beacon-network
+    restart: unless-stopped
+
   backend:
     build:
       context: .
@@ -42,13 +59,39 @@ services:
         required: false
     environment:
       ENV: ${ENV:-local}
-      DATABASE_URL: postgres://beacon_user:beacon_password@postgres:5432/beacon_library
+      # Database
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-beacon_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-beacon_password}
+      POSTGRES_DB: ${POSTGRES_DB:-beacon_library}
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # MinIO - Connect to Beacon's MinIO cluster
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-beacon-minio1:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      # Keycloak - Connect to Beacon's Keycloak
+      KEYCLOAK_URL: ${KEYCLOAK_URL:-http://beacon-keycloak:8080}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-beacon}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-beacon-library}
+      # Observability
+      OTLP_ENDPOINT: ${OTLP_ENDPOINT:-http://beacon-library-alloy:4317}
+      OTLP_ENABLED: ${OTLP_ENABLED:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     expose:
       - "8000"
     networks:
       - beacon-network
+      - beacon_keycloak_net  # Connect to Beacon's Keycloak network
+      - beacon_minio_net     # Connect to Beacon's MinIO network
     restart: unless-stopped
 
   frontend:
@@ -58,6 +101,10 @@ services:
       target: prod
     environment:
       ENV: ${ENV:-local}
+      VITE_API_URL: ${VITE_API_URL:-/api}
+      VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-http://localhost:8080}
+      VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-beacon}
+      VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-beacon-library}
     depends_on:
       - backend
     expose:
@@ -82,12 +129,10 @@ services:
       - ./observability/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
     command: -config.file=/etc/promtail/config.yml -config.expand-env=true
     environment:
-      # Use beacon-loki container name when connected to beacon_monitoring_net
-      # Or override with LOKI_URL env var for external Loki
       LOKI_URL: ${LOKI_URL:-http://beacon-loki:3100}
     networks:
       - beacon-network
-      - beacon_monitoring_net  # Connect to Beacon's monitoring network
+      - beacon_monitoring_net
     restart: unless-stopped
     depends_on:
       - backend
@@ -107,15 +152,12 @@ services:
       - "4318:4318"   # OTLP HTTP receiver
     command: run /etc/alloy/config.alloy
     environment:
-      # Environment label for metrics
       ENV_LABEL: ${ENV:-local}
-      # Use beacon container names when connected to beacon_monitoring_net
       PROMETHEUS_WRITE_URL: ${PROMETHEUS_URL:-http://beacon-prometheus:9090}/api/v1/write
-      # Tempo OTLP endpoint (host:port)
       TEMPO_ENDPOINT: ${TEMPO_URL:-beacon-tempo:4317}
     networks:
       - beacon-network
-      - beacon_monitoring_net  # Connect to Beacon's monitoring network
+      - beacon_monitoring_net
     restart: unless-stopped
     depends_on:
       - cadvisor
@@ -142,10 +184,16 @@ services:
 volumes:
   postgres_data:
     driver: local
+  redis_data:
+    driver: local
 
 networks:
   beacon-network:
     driver: bridge
-  # External network from Beacon project for observability connectivity
+  # External networks from Beacon project
   beacon_monitoring_net:
+    external: true
+  beacon_keycloak_net:
+    external: true
+  beacon_minio_net:
     external: true

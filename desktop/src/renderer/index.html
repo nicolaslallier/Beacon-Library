@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>Beacon Library Sync</title>
+  <style>
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-tertiary: #334155;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --border: #334155;
+      --shadow: rgba(0, 0, 0, 0.3);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      -webkit-app-region: drag;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header h1 svg {
+      width: 24px;
+      height: 24px;
+      color: var(--accent);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+      -webkit-app-region: no-drag;
+    }
+
+    /* Navigation */
+    .nav {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 4px;
+      padding: 0 20px;
+    }
+
+    .nav-item {
+      padding: 12px 16px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .nav-item:hover {
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    /* Main content */
+    .main {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    /* Sync status */
+    .sync-status {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+
+    .sync-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    .sync-icon.synced {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--accent);
+    }
+
+    .sync-icon.syncing {
+      background: rgba(59, 130, 246, 0.2);
+      color: #3b82f6;
+      animation: pulse 2s infinite;
+    }
+
+    .sync-icon.paused {
+      background: rgba(245, 158, 11, 0.2);
+      color: var(--warning);
+    }
+
+    .sync-icon.error {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--danger);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .sync-info {
+      flex: 1;
+    }
+
+    .sync-info h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .sync-info p {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--border);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Forms */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 6px;
+      color: var(--text-secondary);
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .form-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    /* Library list */
+    .library-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .library-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      transition: background 0.2s;
+    }
+
+    .library-item:hover {
+      background: var(--border);
+    }
+
+    .library-icon {
+      width: 40px;
+      height: 40px;
+      background: rgba(16, 185, 129, 0.2);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .library-info {
+      flex: 1;
+    }
+
+    .library-name {
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+
+    .library-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Toggle switch */
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: var(--bg-tertiary);
+      border-radius: 24px;
+      transition: 0.3s;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background: var(--text-secondary);
+      border-radius: 50%;
+      transition: 0.3s;
+    }
+
+    .toggle input:checked + .toggle-slider {
+      background: var(--accent);
+    }
+
+    .toggle input:checked + .toggle-slider:before {
+      transform: translateX(20px);
+      background: white;
+    }
+
+    /* Queue */
+    .queue-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .queue-item:last-child {
+      border-bottom: none;
+    }
+
+    .queue-status {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .queue-status.pending {
+      background: var(--warning);
+    }
+
+    .queue-status.syncing {
+      background: #3b82f6;
+      animation: pulse 1s infinite;
+    }
+
+    .queue-status.error {
+      background: var(--danger);
+    }
+
+    .queue-file {
+      flex: 1;
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Conflicts */
+    .conflict-item {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    .conflict-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      color: var(--danger);
+    }
+
+    .conflict-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--text-secondary);
+    }
+
+    .empty-state svg {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .empty-state h3 {
+      font-size: 18px;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+
+    /* Login screen */
+    .login-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .login-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+
+    .login-logo {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      background: linear-gradient(135deg, var(--accent) 0%, #059669 100%);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+    }
+
+    .login-title {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .login-subtitle {
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+    }
+
+    /* Folder selector */
+    .folder-selector {
+      display: flex;
+      gap: 8px;
+    }
+
+    .folder-path {
+      flex: 1;
+      padding: 10px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .folder-path.empty {
+      font-style: italic;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Login Screen -->
+    <div id="login-screen" class="login-container">
+      <div class="login-card">
+        <div class="login-logo">📚</div>
+        <h1 class="login-title">Beacon Library Sync</h1>
+        <p class="login-subtitle">Connect to your Beacon Library server to start syncing files</p>
+
+        <div class="form-group">
+          <label class="form-label" for="server-url">Server URL</label>
+          <input
+            type="url"
+            id="server-url"
+            class="form-input"
+            placeholder="https://your-server.com"
+            value="http://localhost:8181"
+          >
+        </div>
+
+        <button id="connect-btn" class="btn btn-primary" style="width: 100%;">
+          Connect & Sign In
+        </button>
+      </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="main-app" style="display: none;">
+      <header class="header">
+        <h1>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+          Beacon Library Sync
+        </h1>
+        <div class="header-actions">
+          <button id="sync-now-btn" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+            </svg>
+            Sync Now
+          </button>
+        </div>
+      </header>
+
+      <nav class="nav">
+        <a class="nav-item active" data-tab="status">Status</a>
+        <a class="nav-item" data-tab="libraries">Libraries</a>
+        <a class="nav-item" data-tab="activity">Activity</a>
+        <a class="nav-item" data-tab="settings">Settings</a>
+      </nav>
+
+      <main class="main">
+        <!-- Status Tab -->
+        <div id="tab-status" class="tab-content">
+          <div class="sync-status" id="sync-status-display">
+            <div class="sync-icon synced">✓</div>
+            <div class="sync-info">
+              <h3>All files synced</h3>
+              <p>Last sync: Just now</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">Sync Folder</h2>
+            </div>
+            <div class="folder-selector">
+              <div class="folder-path empty" id="sync-folder-display">No folder selected</div>
+              <button id="select-folder-btn" class="btn btn-secondary">Browse</button>
+            </div>
+          </div>
+
+          <div class="card" id="conflicts-card" style="display: none;">
+            <div class="card-header">
+              <h2 class="card-title">⚠️ Conflicts</h2>
+            </div>
+            <div id="conflicts-list"></div>
+          </div>
+        </div>
+
+        <!-- Libraries Tab -->
+        <div id="tab-libraries" class="tab-content" style="display: none;">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">Libraries</h2>
+            </div>
+            <div class="library-list" id="library-list">
+              <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                </svg>
+                <h3>No libraries found</h3>
+                <p>Connect to a server to see available libraries</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity Tab -->
+        <div id="tab-activity" class="tab-content" style="display: none;">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">Sync Queue</h2>
+            </div>
+            <div id="queue-list">
+              <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <h3>Queue is empty</h3>
+                <p>All files are synced</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="tab-settings" class="tab-content" style="display: none;">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">Sync Settings</h2>
+            </div>
+
+            <div class="form-group" style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div class="form-label" style="margin-bottom: 2px;">Auto Sync</div>
+                <p style="font-size: 12px; color: var(--text-muted);">Automatically sync files in the background</p>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="auto-sync-toggle" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="form-group" style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div class="form-label" style="margin-bottom: 2px;">Start Minimized</div>
+                <p style="font-size: 12px; color: var(--text-muted);">Launch app minimized to system tray</p>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="start-minimized-toggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="form-group" style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <div class="form-label" style="margin-bottom: 2px;">Launch at Startup</div>
+                <p style="font-size: 12px; color: var(--text-muted);">Start app when you log in</p>
+              </div>
+              <label class="toggle">
+                <input type="checkbox" id="launch-startup-toggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">Account</h2>
+            </div>
+            <div id="account-info" style="margin-bottom: 16px;">
+              <p style="color: var(--text-secondary);">Not connected</p>
+            </div>
+            <button id="logout-btn" class="btn btn-danger">Sign Out</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    // App state
+    let isAuthenticated = false;
+    let currentTab = 'status';
+
+    // DOM elements
+    const loginScreen = document.getElementById('login-screen');
+    const mainApp = document.getElementById('main-app');
+    const serverUrlInput = document.getElementById('server-url');
+    const connectBtn = document.getElementById('connect-btn');
+    const syncNowBtn = document.getElementById('sync-now-btn');
+    const selectFolderBtn = document.getElementById('select-folder-btn');
+    const syncFolderDisplay = document.getElementById('sync-folder-display');
+    const libraryList = document.getElementById('library-list');
+    const queueList = document.getElementById('queue-list');
+    const conflictsList = document.getElementById('conflicts-list');
+    const conflictsCard = document.getElementById('conflicts-card');
+    const accountInfo = document.getElementById('account-info');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    // Tab navigation
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const tab = item.dataset.tab;
+        switchTab(tab);
+      });
+    });
+
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+      document.querySelector(`.nav-item[data-tab="${tab}"]`).classList.add('active');
+      document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+      document.getElementById(`tab-${tab}`).style.display = 'block';
+    }
+
+    // Connect button
+    connectBtn.addEventListener('click', async () => {
+      const serverUrl = serverUrlInput.value.trim();
+      if (!serverUrl) return;
+
+      connectBtn.disabled = true;
+      connectBtn.textContent = 'Connecting...';
+
+      try {
+        const success = await window.electronAPI.auth.login(serverUrl);
+        if (success) {
+          await checkAuthStatus();
+        }
+      } catch (error) {
+        console.error('Login failed:', error);
+        alert('Failed to connect. Please check the server URL and try again.');
+      } finally {
+        connectBtn.disabled = false;
+        connectBtn.textContent = 'Connect & Sign In';
+      }
+    });
+
+    // Check auth status
+    async function checkAuthStatus() {
+      try {
+        const status = await window.electronAPI.auth.getStatus();
+        isAuthenticated = status.isAuthenticated;
+
+        if (isAuthenticated) {
+          loginScreen.style.display = 'none';
+          mainApp.style.display = 'flex';
+          mainApp.style.flexDirection = 'column';
+          mainApp.style.height = '100vh';
+
+          if (status.user) {
+            accountInfo.innerHTML = `
+              <p><strong>${status.user.name || status.user.email}</strong></p>
+              <p style="font-size: 12px; color: var(--text-muted);">${status.serverUrl}</p>
+            `;
+          }
+
+          await loadData();
+        } else {
+          loginScreen.style.display = 'flex';
+          mainApp.style.display = 'none';
+        }
+      } catch (error) {
+        console.error('Failed to check auth status:', error);
+      }
+    }
+
+    // Load data
+    async function loadData() {
+      await Promise.all([
+        loadSyncFolder(),
+        loadLibraries(),
+        loadSyncStatus(),
+        loadQueue(),
+        loadConflicts(),
+        loadSettings(),
+      ]);
+    }
+
+    // Sync folder
+    async function loadSyncFolder() {
+      const folder = await window.electronAPI.settings.get('syncFolder');
+      if (folder) {
+        syncFolderDisplay.textContent = folder;
+        syncFolderDisplay.classList.remove('empty');
+      }
+    }
+
+    selectFolderBtn.addEventListener('click', async () => {
+      const folder = await window.electronAPI.settings.selectSyncFolder();
+      if (folder) {
+        syncFolderDisplay.textContent = folder;
+        syncFolderDisplay.classList.remove('empty');
+      }
+    });
+
+    // Libraries
+    async function loadLibraries() {
+      try {
+        const libraries = await window.electronAPI.libraries.list();
+        const syncedLibraries = await window.electronAPI.settings.get('syncedLibraries') || [];
+
+        if (libraries.length === 0) {
+          libraryList.innerHTML = `
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+              </svg>
+              <h3>No libraries found</h3>
+              <p>Create a library in Beacon Library to start syncing</p>
+            </div>
+          `;
+          return;
+        }
+
+        libraryList.innerHTML = libraries.map(lib => `
+          <div class="library-item">
+            <div class="library-icon">📁</div>
+            <div class="library-info">
+              <div class="library-name">${lib.name}</div>
+              <div class="library-meta">${lib.description || 'No description'}</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox"
+                     data-library-id="${lib.id}"
+                     ${syncedLibraries.includes(lib.id) ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        `).join('');
+
+        // Add event listeners for toggles
+        libraryList.querySelectorAll('input[data-library-id]').forEach(input => {
+          input.addEventListener('change', async (e) => {
+            const libraryId = e.target.dataset.libraryId;
+            await window.electronAPI.libraries.setEnabled(libraryId, e.target.checked);
+          });
+        });
+      } catch (error) {
+        console.error('Failed to load libraries:', error);
+      }
+    }
+
+    // Sync status
+    async function loadSyncStatus() {
+      try {
+        const status = await window.electronAPI.sync.getStatus();
+        const statusDisplay = document.getElementById('sync-status-display');
+
+        let icon, iconClass, title, subtitle;
+
+        if (status.isPaused) {
+          icon = '⏸';
+          iconClass = 'paused';
+          title = 'Sync paused';
+          subtitle = 'Click "Sync Now" to resume';
+        } else if (status.isRunning) {
+          icon = '↻';
+          iconClass = 'syncing';
+          title = 'Syncing...';
+          subtitle = status.currentItem ? `Syncing: ${status.currentItem}` : 'Processing queue';
+        } else if (status.errorItems > 0) {
+          icon = '!';
+          iconClass = 'error';
+          title = `${status.errorItems} sync error(s)`;
+          subtitle = 'Check the activity tab for details';
+        } else {
+          icon = '✓';
+          iconClass = 'synced';
+          title = 'All files synced';
+          subtitle = status.lastSync
+            ? `Last sync: ${new Date(status.lastSync).toLocaleString()}`
+            : 'Ready to sync';
+        }
+
+        statusDisplay.innerHTML = `
+          <div class="sync-icon ${iconClass}">${icon}</div>
+          <div class="sync-info">
+            <h3>${title}</h3>
+            <p>${subtitle}</p>
+          </div>
+        `;
+      } catch (error) {
+        console.error('Failed to load sync status:', error);
+      }
+    }
+
+    // Queue
+    async function loadQueue() {
+      try {
+        const queue = await window.electronAPI.sync.getQueue();
+
+        if (queue.length === 0) {
+          queueList.innerHTML = `
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <h3>Queue is empty</h3>
+              <p>All files are synced</p>
+            </div>
+          `;
+          return;
+        }
+
+        queueList.innerHTML = queue.map(item => `
+          <div class="queue-item">
+            <div class="queue-status ${item.status}"></div>
+            <div class="queue-file">${item.filePath}</div>
+            <div style="font-size: 12px; color: var(--text-muted);">${item.eventType}</div>
+          </div>
+        `).join('');
+      } catch (error) {
+        console.error('Failed to load queue:', error);
+      }
+    }
+
+    // Conflicts
+    async function loadConflicts() {
+      try {
+        const conflicts = await window.electronAPI.conflicts.list();
+
+        if (conflicts.length === 0) {
+          conflictsCard.style.display = 'none';
+          return;
+        }
+
+        conflictsCard.style.display = 'block';
+        conflictsList.innerHTML = conflicts.map(conflict => `
+          <div class="conflict-item">
+            <div class="conflict-header">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+              </svg>
+              <span>Conflict detected</span>
+            </div>
+            <p style="font-size: 13px; margin-bottom: 8px;">${conflict.localPath}</p>
+            <p style="font-size: 12px; color: var(--text-muted);">
+              Local: ${new Date(conflict.localModified).toLocaleString()}<br>
+              Remote: ${new Date(conflict.remoteModified).toLocaleString()}
+            </p>
+            <div class="conflict-actions">
+              <button class="btn btn-secondary" onclick="resolveConflict('${conflict.id}', 'keep_local')">Keep Local</button>
+              <button class="btn btn-secondary" onclick="resolveConflict('${conflict.id}', 'keep_remote')">Keep Remote</button>
+              <button class="btn btn-secondary" onclick="resolveConflict('${conflict.id}', 'keep_both')">Keep Both</button>
+            </div>
+          </div>
+        `).join('');
+      } catch (error) {
+        console.error('Failed to load conflicts:', error);
+      }
+    }
+
+    async function resolveConflict(conflictId, resolution) {
+      try {
+        await window.electronAPI.conflicts.resolve(conflictId, resolution);
+        await loadConflicts();
+        await loadSyncStatus();
+      } catch (error) {
+        console.error('Failed to resolve conflict:', error);
+      }
+    }
+
+    // Settings
+    async function loadSettings() {
+      const autoSync = await window.electronAPI.settings.get('autoSync');
+      const startMinimized = await window.electronAPI.settings.get('startMinimized');
+      const launchAtStartup = await window.electronAPI.settings.get('launchAtStartup');
+
+      document.getElementById('auto-sync-toggle').checked = autoSync;
+      document.getElementById('start-minimized-toggle').checked = startMinimized;
+      document.getElementById('launch-startup-toggle').checked = launchAtStartup;
+    }
+
+    // Setting toggles
+    document.getElementById('auto-sync-toggle').addEventListener('change', async (e) => {
+      await window.electronAPI.settings.set('autoSync', e.target.checked);
+    });
+
+    document.getElementById('start-minimized-toggle').addEventListener('change', async (e) => {
+      await window.electronAPI.settings.set('startMinimized', e.target.checked);
+    });
+
+    document.getElementById('launch-startup-toggle').addEventListener('change', async (e) => {
+      await window.electronAPI.settings.set('launchAtStartup', e.target.checked);
+    });
+
+    // Sync now button
+    syncNowBtn.addEventListener('click', async () => {
+      syncNowBtn.disabled = true;
+      await window.electronAPI.sync.syncNow();
+      await loadSyncStatus();
+      await loadQueue();
+      syncNowBtn.disabled = false;
+    });
+
+    // Logout
+    logoutBtn.addEventListener('click', async () => {
+      await window.electronAPI.auth.logout();
+      await checkAuthStatus();
+    });
+
+    // Navigation from main process
+    window.electronAPI.onNavigate((path) => {
+      if (path === '/settings') {
+        switchTab('settings');
+      }
+    });
+
+    // Initialize
+    checkAuthStatus();
+
+    // Refresh data periodically
+    setInterval(async () => {
+      if (isAuthenticated) {
+        await loadSyncStatus();
+        await loadQueue();
+      }
+    }, 5000);
+  </script>
+</body>
+</html>

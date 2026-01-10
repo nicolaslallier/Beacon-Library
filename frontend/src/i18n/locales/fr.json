@@ -1,0 +1,164 @@
+{
+  "common": {
+    "loading": "Chargement...",
+    "error": "Une erreur s'est produite",
+    "retry": "Réessayer",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "create": "Créer",
+    "close": "Fermer",
+    "confirm": "Confirmer",
+    "search": "Rechercher",
+    "filter": "Filtrer",
+    "sort": "Trier",
+    "name": "Nom",
+    "size": "Taille",
+    "date": "Date",
+    "type": "Type",
+    "actions": "Actions",
+    "yes": "Oui",
+    "no": "Non"
+  },
+  "auth": {
+    "login": "Se connecter",
+    "logout": "Se déconnecter",
+    "loginRequired": "Veuillez vous connecter pour continuer",
+    "sessionExpired": "Votre session a expiré. Veuillez vous reconnecter.",
+    "unauthorized": "Vous n'avez pas la permission d'accéder à cette ressource"
+  },
+  "nav": {
+    "home": "Accueil",
+    "libraries": "Bibliothèques",
+    "search": "Recherche",
+    "settings": "Paramètres",
+    "about": "À propos"
+  },
+  "library": {
+    "title": "Bibliothèques",
+    "create": "Créer une bibliothèque",
+    "createTitle": "Nouvelle bibliothèque",
+    "name": "Nom de la bibliothèque",
+    "namePlaceholder": "Entrez le nom de la bibliothèque",
+    "description": "Description",
+    "descriptionPlaceholder": "Entrez une description (optionnel)",
+    "mcpWriteEnabled": "Activer l'accès en écriture IA",
+    "mcpWriteEnabledHelp": "Permettre aux agents IA de créer et modifier des fichiers via MCP",
+    "empty": "Aucune bibliothèque",
+    "emptyDescription": "Créez votre première bibliothèque pour commencer à organiser vos fichiers",
+    "deleteConfirm": "Êtes-vous sûr de vouloir supprimer cette bibliothèque ?",
+    "deleteWarning": "Tous les fichiers seront déplacés vers la corbeille"
+  },
+  "explorer": {
+    "title": "Explorateur de fichiers",
+    "newFolder": "Nouveau dossier",
+    "upload": "Téléverser",
+    "download": "Télécharger",
+    "rename": "Renommer",
+    "move": "Déplacer",
+    "copy": "Copier",
+    "delete": "Supprimer",
+    "share": "Partager",
+    "properties": "Propriétés",
+    "emptyFolder": "Ce dossier est vide",
+    "emptyFolderDescription": "Glissez-déposez des fichiers ici ou cliquez sur Téléverser",
+    "dropzone": "Déposez les fichiers ici pour téléverser",
+    "breadcrumb": {
+      "root": "Racine"
+    },
+    "sort": {
+      "name": "Nom",
+      "size": "Taille",
+      "modified": "Date de modification",
+      "type": "Type"
+    },
+    "view": {
+      "list": "Vue liste",
+      "grid": "Vue grille"
+    }
+  },
+  "upload": {
+    "title": "Téléverser des fichiers",
+    "dragDrop": "Glissez-déposez des fichiers ici",
+    "or": "ou",
+    "browse": "Parcourir les fichiers",
+    "uploading": "Téléversement...",
+    "progress": "{{current}} sur {{total}} fichiers",
+    "complete": "Téléversement terminé",
+    "failed": "Échec du téléversement",
+    "retry": "Réessayer les téléversements échoués",
+    "cancel": "Annuler le téléversement",
+    "duplicate": {
+      "title": "Le fichier existe déjà",
+      "message": "Un fichier nommé \"{{filename}}\" existe déjà à cet emplacement.",
+      "overwrite": "Remplacer",
+      "rename": "Conserver les deux",
+      "skip": "Ignorer"
+    }
+  },
+  "folder": {
+    "create": "Créer un dossier",
+    "createTitle": "Nouveau dossier",
+    "name": "Nom du dossier",
+    "namePlaceholder": "Entrez le nom du dossier",
+    "nameRequired": "Le nom du dossier est requis",
+    "nameExists": "Un dossier avec ce nom existe déjà"
+  },
+  "file": {
+    "name": "Nom du fichier",
+    "size": "Taille",
+    "type": "Type",
+    "modified": "Modifié",
+    "created": "Créé",
+    "version": "Version",
+    "versions": "Historique des versions",
+    "preview": "Aperçu",
+    "noPreview": "Aperçu non disponible"
+  },
+  "share": {
+    "title": "Partager",
+    "createLink": "Créer un lien de partage",
+    "copyLink": "Copier le lien",
+    "linkCopied": "Lien copié dans le presse-papiers",
+    "permission": {
+      "readOnly": "Lecture seule",
+      "readWrite": "Peut modifier",
+      "viewOnly": "Aperçu uniquement"
+    },
+    "expiry": {
+      "never": "N'expire jamais",
+      "days": "Expire dans {{days}} jours",
+      "custom": "Expiration personnalisée"
+    },
+    "password": {
+      "protect": "Protéger par mot de passe",
+      "placeholder": "Entrez le mot de passe"
+    }
+  },
+  "notification": {
+    "share": {
+      "received": {
+        "title": "Nouveau partage",
+        "message": "{{sender}} a partagé \"{{item}}\" avec vous"
+      }
+    }
+  },
+  "error": {
+    "generic": "Une erreur s'est produite",
+    "notFound": "Non trouvé",
+    "forbidden": "Accès refusé",
+    "networkError": "Erreur réseau. Veuillez vérifier votre connexion.",
+    "serverError": "Erreur serveur. Veuillez réessayer plus tard."
+  },
+  "accessibility": {
+    "skipToMain": "Aller au contenu principal",
+    "menu": "Menu",
+    "closeMenu": "Fermer le menu",
+    "openMenu": "Ouvrir le menu",
+    "expandFolder": "Développer le dossier",
+    "collapseFolder": "Réduire le dossier",
+    "selectItem": "Sélectionner {{name}}",
+    "selectedItems": "{{count}} éléments sélectionnés"
+  }
+}
