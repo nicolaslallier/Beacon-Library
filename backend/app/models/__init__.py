@@ -6,7 +6,7 @@ from app.models.directory import Directory
 from app.models.file import FileMetadata, FileVersion
 from app.models.library import Library
 from app.models.notification import Notification, NotificationChannel, NotificationType
-from app.models.share import ShareLink, SharePermission, ShareTargetType
+from app.models.share import ShareLink, ShareTargetType, ShareType
 
 __all__ = [
     # Base
@@ -21,7 +21,7 @@ __all__ = [
     "FileVersion",
     "ShareLink",
     "ShareTargetType",
-    "SharePermission",
+    "ShareType",
     "AuditEvent",
     "AuditAction",
     "ActorType",

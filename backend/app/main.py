@@ -9,10 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import api_router
 from app.core.config import settings
 from app.core.correlation import CorrelationIdMiddleware
-from app.core.database import close_db, init_db
+from app.core.database import async_session_factory, close_db, init_db
 from app.core.versioning import APIVersionMiddleware
 from app.observability import instrument_app
 from app.services.cache import close_cache_service, get_cache_service
+from app.services.search import start_indexing_worker, stop_indexing_worker
+from app.services.storage import get_storage_service
 
 logger = structlog.get_logger(__name__)
 
@@ -37,10 +39,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("cache_connection_failed", error=str(e))
 
+    # Start search indexing worker
+    try:
+        storage_service = get_storage_service()
+        await start_indexing_worker(async_session_factory, storage_service)
+        logger.info("search_indexing_worker_started")
+    except Exception as e:
+        logger.warning("search_indexing_worker_failed", error=str(e))
+
     yield
 
     # Shutdown
     logger.info("application_shutting_down")
+    await stop_indexing_worker()
     await close_db()
     await close_cache_service()
 
@@ -90,6 +101,16 @@ async def root():
 
 @app.get("/health")
 async def health_check():
+    """Health check endpoint for container orchestration."""
+    return {
+        "status": "ok",
+        "version": settings.app_version,
+        "env": settings.env,
+    }
+
+
+@app.get("/api/health")
+async def api_health_check():
     """Health check endpoint for frontend status monitoring."""
     return {
         "status": "ok",

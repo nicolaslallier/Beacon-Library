@@ -22,7 +22,7 @@ from app.schemas.trash import (
     TrashListResponse,
 )
 from app.services.audit import AuditService
-from app.services.storage import MinIOService
+from app.services.storage import StorageService
 
 logger = structlog.get_logger(__name__)
 
@@ -33,7 +33,7 @@ class TrashService:
     def __init__(
         self,
         db: AsyncSession,
-        storage: Optional[MinIOService] = None,
+        storage: Optional[StorageService] = None,
         audit: Optional[AuditService] = None,
     ):
         self.db = db

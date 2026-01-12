@@ -177,12 +177,27 @@ class StorageService:
             if metadata:
                 extra_args["Metadata"] = metadata
 
-            response = await client.put_object(
-                Bucket=bucket,
-                Key=key,
-                Body=content,
-                **extra_args,
-            )
+            try:
+                response = await client.put_object(
+                    Bucket=bucket,
+                    Key=key,
+                    Body=content,
+                    **extra_args,
+                )
+            except ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code == "NoSuchBucket":
+                    # Bucket doesn't exist, create it and retry
+                    logger.info("bucket_missing_creating", bucket=bucket)
+                    await self.create_bucket(bucket)
+                    response = await client.put_object(
+                        Bucket=bucket,
+                        Key=key,
+                        Body=content,
+                        **extra_args,
+                    )
+                else:
+                    raise
 
             logger.info(
                 "file_uploaded",
@@ -230,11 +245,25 @@ class StorageService:
             if metadata:
                 extra_args["Metadata"] = metadata
 
-            response = await client.create_multipart_upload(
-                Bucket=bucket,
-                Key=key,
-                **extra_args,
-            )
+            try:
+                response = await client.create_multipart_upload(
+                    Bucket=bucket,
+                    Key=key,
+                    **extra_args,
+                )
+            except ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code == "NoSuchBucket":
+                    # Bucket doesn't exist, create it and retry
+                    logger.info("bucket_missing_creating", bucket=bucket)
+                    await self.create_bucket(bucket)
+                    response = await client.create_multipart_upload(
+                        Bucket=bucket,
+                        Key=key,
+                        **extra_args,
+                    )
+                else:
+                    raise
 
             upload_id = response["UploadId"]
 

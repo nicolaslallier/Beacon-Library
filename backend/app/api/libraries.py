@@ -1,7 +1,6 @@
 """API routes for library management."""
 
 import uuid
-from typing import List
 
 import structlog
 from fastapi import APIRouter, HTTPException, status
@@ -22,6 +21,7 @@ from app.schemas.library import (
     LibraryResponse,
     LibraryUpdate,
 )
+from app.services.search import queue_library_for_deindexing
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -67,7 +67,11 @@ async def create_library(
     try:
         await storage.create_bucket(bucket_name)
     except Exception as e:
-        logger.error("bucket_creation_failed", bucket=bucket_name, error=str(e))
+        logger.error(
+            "bucket_creation_failed",
+            bucket=bucket_name,
+            error=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create storage bucket",
@@ -118,7 +122,7 @@ async def list_libraries(
     Admins see all libraries, users see only their own.
     """
     # Build query
-    query = select(Library).where(Library.is_deleted == False)
+    query = select(Library).where(Library.is_deleted.is_(False))
 
     # Non-admins only see their own libraries
     if not user.is_admin:
@@ -144,7 +148,7 @@ async def list_libraries(
             func.coalesce(func.sum(FileMetadata.size_bytes), 0),
         ).where(
             FileMetadata.library_id == lib.id,
-            FileMetadata.is_deleted == False,
+            FileMetadata.is_deleted.is_(False),
         )
         stats = (await db.execute(stats_query)).one()
 
@@ -188,7 +192,7 @@ async def get_library(
         func.coalesce(func.sum(FileMetadata.size_bytes), 0),
     ).where(
         FileMetadata.library_id == library.id,
-        FileMetadata.is_deleted == False,
+        FileMetadata.is_deleted.is_(False),
     )
     stats = (await db.execute(stats_query)).one()
 
@@ -291,3 +295,13 @@ async def delete_library(
         library_id=str(library.id),
         user_id=str(user.user_id),
     )
+
+    # Best-effort: delete the library's vector collection
+    try:
+        await queue_library_for_deindexing(library.id)
+    except Exception as e:
+        logger.warning(
+            "search_deindex_queue_failed",
+            library_id=str(library.id),
+            error=str(e),
+        )

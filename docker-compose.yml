@@ -25,7 +25,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-beacon_user}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-beacon_user} -d ${POSTGRES_DB:-beacon_library}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -53,10 +53,12 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-      target: prod
+      target: ${BACKEND_TARGET:-dev}
     env_file:
       - path: .env
         required: false
+    volumes:
+      - ./backend:/app
     environment:
       ENV: ${ENV:-local}
       # Database
@@ -77,17 +79,43 @@ services:
       KEYCLOAK_URL: ${KEYCLOAK_URL:-http://beacon-keycloak:8080}
       KEYCLOAK_REALM: ${KEYCLOAK_REALM:-beacon}
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-beacon-library}
+      ENABLE_AUTH: ${ENABLE_AUTH:-false}  # Disable auth for development by default
+      # ChromaDB - Semantic search
+      CHROMADB_HOST: chromadb
+      CHROMADB_PORT: 8000
+      # Ollama - Embeddings
+      OLLAMA_HOST: ollama
+      OLLAMA_PORT: 11434
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      # Gotenberg - Document conversion
+      GOTENBERG_URL: http://gotenberg:3000
+      # SMTP - Email notifications
+      SMTP_HOST: ${SMTP_HOST:-mailhog}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@beacon.local}
       # Observability
       OTLP_ENDPOINT: ${OTLP_ENDPOINT:-http://beacon-library-alloy:4317}
       OTLP_ENABLED: ${OTLP_ENABLED:-true}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      chromadb:
+        condition: service_healthy
+      gotenberg:
+        condition: service_healthy
     expose:
       - "8000"
+    # Expose MCP API directly for local agents (LM Studio, etc.)
+    # This allows agents to connect via HTTP without SSL certificate issues
+    ports:
+      - "${MCP_PORT:-8200}:8000"
     networks:
       - beacon-network
       - beacon_keycloak_net  # Connect to Beacon's Keycloak network
@@ -98,17 +126,151 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-      target: prod
+      target: ${FRONTEND_TARGET:-dev}
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
     environment:
       ENV: ${ENV:-local}
       VITE_API_URL: ${VITE_API_URL:-/api}
+      VITE_ENABLE_AUTH: ${VITE_ENABLE_AUTH:-false}
       VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-http://localhost:8080}
       VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-beacon}
       VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-beacon-library}
+    command: ["npm", "run", "dev", "--", "--host", "--port", "3000"]
     depends_on:
       - backend
     expose:
-      - "80"
+      - "3000"
+    networks:
+      - beacon-network
+    restart: unless-stopped
+
+  # =============================================================================
+  # Beacon-Library Specific Services
+  # =============================================================================
+
+  # ChromaDB - Vector database for semantic search
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: beacon-library-chromadb
+    ports:
+      - "${CHROMADB_PORT:-8100}:8000"
+    volumes:
+      - chromadb_data:/data
+      - ./observability/chromadb/config.yaml:/config.yaml:ro
+    environment:
+      ANONYMIZED_TELEMETRY: "false"
+      ALLOW_RESET: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8000'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - beacon-network
+    restart: unless-stopped
+
+  # Ollama - Local LLM for embeddings
+  ollama:
+    image: ollama/ollama:latest
+    container_name: beacon-library-ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - beacon-network
+    restart: unless-stopped
+
+  # Gotenberg - Document conversion (LibreOffice-based)
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: beacon-library-gotenberg
+    ports:
+      - "${GOTENBERG_PORT:-3100}:3000"
+    command:
+      - "gotenberg"
+      - "--api-timeout=120s"
+      - "--libreoffice-restart-after=10"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - beacon-network
+    restart: unless-stopped
+
+  # MailHog - SMTP testing server (dev/local only)
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: beacon-library-mailhog
+    ports:
+      - "${MAILHOG_SMTP_PORT:-1025}:1025"   # SMTP
+      - "${MAILHOG_UI_PORT:-8025}:8025"     # Web UI
+    networks:
+      - beacon-network
+    restart: unless-stopped
+
+  # MCP Vector Server - ChromaDB operations as MCP tools for RAG workflows
+  mcp-vector:
+    build:
+      context: ./mcp-vector
+      dockerfile: Dockerfile
+      target: ${MCP_VECTOR_TARGET:-dev}
+    container_name: beacon-library-mcp-vector
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./mcp-vector:/app
+    environment:
+      ENV: ${ENV:-local}
+      # ChromaDB
+      CHROMADB_HOST: chromadb
+      CHROMADB_PORT: 8000
+      # Ollama
+      OLLAMA_HOST: ollama
+      OLLAMA_PORT: 11434
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      # PostgreSQL (for library metadata and access control)
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-beacon_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-beacon_password}
+      POSTGRES_DB: ${POSTGRES_DB:-beacon_library}
+      # MCP settings
+      MCP_RATE_LIMIT_REQUESTS: ${MCP_RATE_LIMIT_REQUESTS:-100}
+      MCP_RATE_LIMIT_WINDOW: ${MCP_RATE_LIMIT_WINDOW:-60}
+      MCP_DEFAULT_WRITE_ENABLED: ${MCP_DEFAULT_WRITE_ENABLED:-false}
+      # Vector search settings
+      DEFAULT_TOP_K: ${DEFAULT_TOP_K:-8}
+      LOW_CONFIDENCE_THRESHOLD: ${LOW_CONFIDENCE_THRESHOLD:-0.3}
+      # Observability
+      OTLP_ENDPOINT: ${OTLP_ENDPOINT:-http://beacon-library-alloy:4317}
+      OTLP_ENABLED: ${OTLP_ENABLED:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+    expose:
+      - "8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks:
       - beacon-network
     restart: unless-stopped
@@ -185,6 +347,12 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  chromadb_data:
+    driver: local
+  ollama_data:
+    driver: local
+  frontend_node_modules:
     driver: local
 
 networks:

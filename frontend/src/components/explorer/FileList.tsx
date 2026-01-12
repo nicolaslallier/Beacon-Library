@@ -3,7 +3,7 @@
  * WCAG AAA compliant with full keyboard navigation
  */
 
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Folder,
@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 import { cn, formatBytes, formatDate, getFileIcon } from '../../lib/utils';
-import { BrowseItem } from '../../services/files';
+import type { BrowseItem } from '../../services/files';
 
 interface FileListProps {
   items: BrowseItem[];

@@ -1,22 +1,32 @@
-import Keycloak from 'keycloak-js';
+import Keycloak from "keycloak-js";
+import type { ReactNode } from "react";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
-  useCallback,
-  ReactNode,
-} from 'react';
+} from "react";
+import { setTokenGetter } from "../services/api";
 
 // Configuration from environment
 const keycloakConfig = {
-  url: import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8080',
-  realm: import.meta.env.VITE_KEYCLOAK_REALM || 'beacon',
-  clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || 'beacon-library',
+  url: import.meta.env.VITE_KEYCLOAK_URL || "http://localhost:8080",
+  realm: import.meta.env.VITE_KEYCLOAK_REALM || "beacon",
+  clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID || "beacon-library",
 };
 
-// Keycloak instance
-const keycloak = new Keycloak(keycloakConfig);
+// Keycloak instance - use singleton pattern
+let keycloak: Keycloak | null = null;
+let isInitializing = false;
+let isInitialized = false;
+
+function getKeycloakInstance(): Keycloak {
+  if (!keycloak) {
+    keycloak = new Keycloak(keycloakConfig);
+  }
+  return keycloak;
+}
 
 // User interface
 export interface User {
@@ -53,22 +63,20 @@ function parseUser(kc: Keycloak): User | null {
 
   const token = kc.tokenParsed as Record<string, unknown>;
   const realmAccess = (token.realm_access as { roles?: string[] }) || {};
-  const resourceAccess = (token.resource_access as Record<string, { roles?: string[] }>) || {};
+  const resourceAccess =
+    (token.resource_access as Record<string, { roles?: string[] }>) || {};
   const clientAccess = resourceAccess[keycloakConfig.clientId] || {};
 
-  const roles = [
-    ...(realmAccess.roles || []),
-    ...(clientAccess.roles || []),
-  ];
+  const roles = [...(realmAccess.roles || []), ...(clientAccess.roles || [])];
 
   return {
     id: token.sub as string,
-    username: token.preferred_username as string || '',
+    username: (token.preferred_username as string) || "",
     email: token.email as string | undefined,
     name: token.name as string | undefined,
     roles,
-    isAdmin: roles.includes('library-admin'),
-    isGuest: roles.includes('guest') || (token.azp === 'beacon-library-guest'),
+    isAdmin: roles.includes("library-admin"),
+    isGuest: roles.includes("guest") || token.azp === "beacon-library-guest",
   };
 }
 
@@ -82,43 +90,74 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Initialize Keycloak
   useEffect(() => {
     const initKeycloak = async () => {
+      // Prevent double initialization
+      if (isInitializing || isInitialized) {
+        return;
+      }
+
+      isInitializing = true;
+
+      const kc = getKeycloakInstance();
+
+      // Set up the token getter for API client - returns a function that gets current token
+      setTokenGetter(() => () => kc.token || null);
+
+      // Skip if already authenticated
+      if (kc.authenticated) {
+        setIsAuthenticated(true);
+        setUser(parseUser(kc));
+        setToken(kc.token || null);
+        setIsLoading(false);
+        isInitializing = false;
+        isInitialized = true;
+        return;
+      }
+
       try {
-        const authenticated = await keycloak.init({
-          onLoad: 'check-sso',
-          silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
+        const authenticated = await kc.init({
+          onLoad: "check-sso",
           checkLoginIframe: false,
-          pkceMethod: 'S256',
+          pkceMethod: "S256",
         });
 
         setIsAuthenticated(authenticated);
 
         if (authenticated) {
-          setUser(parseUser(keycloak));
-          setToken(keycloak.token || null);
+          setUser(parseUser(kc));
+          setToken(kc.token || null);
         }
+
+        isInitialized = true;
       } catch (error) {
-        console.error('Keycloak initialization failed:', error);
+        console.error("Keycloak initialization failed:", error);
+        setError(error instanceof Error ? error.message : "Authentication initialization failed");
+        // Don't block the app if Keycloak fails to initialize
+        setIsAuthenticated(false);
       } finally {
         setIsLoading(false);
+        isInitializing = false;
       }
     };
 
     initKeycloak();
 
+    const kc = getKeycloakInstance();
+
     // Token refresh handler
-    keycloak.onTokenExpired = () => {
-      keycloak.updateToken(30)
+    kc.onTokenExpired = () => {
+      kc.updateToken(30)
         .then((refreshed) => {
           if (refreshed) {
-            setToken(keycloak.token || null);
+            setToken(kc.token || null);
           }
         })
         .catch(() => {
-          console.error('Failed to refresh token');
+          console.error("Failed to refresh token");
           setIsAuthenticated(false);
           setUser(null);
           setToken(null);
@@ -126,33 +165,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
 
     // Auth state change handler
-    keycloak.onAuthSuccess = () => {
+    kc.onAuthSuccess = () => {
       setIsAuthenticated(true);
-      setUser(parseUser(keycloak));
-      setToken(keycloak.token || null);
+      setUser(parseUser(kc));
+      setToken(kc.token || null);
+      setError(null);
     };
 
-    keycloak.onAuthLogout = () => {
+    kc.onAuthLogout = () => {
       setIsAuthenticated(false);
       setUser(null);
       setToken(null);
     };
 
     return () => {
-      keycloak.onTokenExpired = undefined;
-      keycloak.onAuthSuccess = undefined;
-      keycloak.onAuthLogout = undefined;
+      kc.onTokenExpired = undefined;
+      kc.onAuthSuccess = undefined;
+      kc.onAuthLogout = undefined;
     };
   }, []);
 
   // Login function
   const login = useCallback(async () => {
     try {
-      await keycloak.login({
+      await getKeycloakInstance().login({
         redirectUri: window.location.origin,
       });
     } catch (error) {
-      console.error('Login failed:', error);
+      console.error("Login failed:", error);
       throw error;
     }
   }, []);
@@ -160,11 +200,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Logout function
   const logout = useCallback(async () => {
     try {
-      await keycloak.logout({
+      await getKeycloakInstance().logout({
         redirectUri: window.location.origin,
       });
     } catch (error) {
-      console.error('Logout failed:', error);
+      console.error("Logout failed:", error);
       throw error;
     }
   }, []);
@@ -172,25 +212,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Refresh token function
   const refreshToken = useCallback(async (): Promise<boolean> => {
     try {
-      const refreshed = await keycloak.updateToken(30);
+      const kc = getKeycloakInstance();
+      const refreshed = await kc.updateToken(30);
       if (refreshed) {
-        setToken(keycloak.token || null);
+        setToken(kc.token || null);
       }
       return refreshed;
     } catch (error) {
-      console.error('Token refresh failed:', error);
+      console.error("Token refresh failed:", error);
       return false;
     }
   }, []);
 
   // Role check functions
-  const hasRole = useCallback((role: string): boolean => {
-    return user?.roles.includes(role) || false;
-  }, [user]);
+  const hasRole = useCallback(
+    (role: string): boolean => {
+      return user?.roles.includes(role) || false;
+    },
+    [user]
+  );
 
-  const hasAnyRole = useCallback((roles: string[]): boolean => {
-    return roles.some(role => user?.roles.includes(role)) || false;
-  }, [user]);
+  const hasAnyRole = useCallback(
+    (roles: string[]): boolean => {
+      return roles.some((role) => user?.roles.includes(role)) || false;
+    },
+    [user]
+  );
 
   const value: AuthContextType = {
     isAuthenticated,
@@ -204,11 +251,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     hasAnyRole,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // Custom hook to use auth context
@@ -216,7 +259,7 @@ export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
 
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
 
   return context;
@@ -256,5 +299,5 @@ export function RequireAuth({ children, roles, fallback }: RequireAuthProps) {
   return <>{children}</>;
 }
 
-// Export Keycloak instance for direct access if needed
-export { keycloak };
+// Export Keycloak getter function for direct access if needed
+export { getKeycloakInstance };

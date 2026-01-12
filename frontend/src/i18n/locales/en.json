@@ -1,4 +1,39 @@
 {
+  "search": {
+    "title": "Smart Search",
+    "subtitle": "Find documents using natural language powered by AI",
+    "placeholder": "Search for documents, topics, or content...",
+    "searching": "Searching...",
+    "error": "Search failed. Please try again.",
+    "resultsCount": "{{count}} result(s) found",
+    "resultsCount_one": "1 result found",
+    "resultsCount_other": "{{count}} results found",
+    "sortedByRelevance": "Sorted by relevance",
+    "relevance": "Match",
+    "noResults": "No results found",
+    "noResultsDesc": "Try different keywords or adjust your filters",
+    "startSearching": "Start searching",
+    "startSearchingDesc": "Enter keywords to find documents across all your libraries using semantic search",
+    "minLength": "Please enter at least 2 characters",
+    "filters": {
+      "title": "Filters",
+      "clear": "Clear filters",
+      "library": "Library",
+      "allLibraries": "All libraries",
+      "fileType": "File type",
+      "allTypes": "All types",
+      "images": "Images",
+      "text": "Text documents",
+      "office": "Office documents",
+      "videos": "Videos",
+      "audio": "Audio"
+    },
+    "semanticInfo": {
+      "title": "Semantic Search",
+      "description": "Our AI-powered search understands the meaning of your query, not just keywords. Try searching for concepts, topics, or ask questions about your documents."
+    },
+    "goToFolder": "Go to folder"
+  },
   "common": {
     "loading": "Loading...",
     "error": "An error occurred",
@@ -86,6 +121,7 @@
     "dragDrop": "Drag and drop files here",
     "or": "or",
     "browse": "Browse Files",
+    "browseFolder": "Browse Folder",
     "uploading": "Uploading...",
     "progress": "{{current}} of {{total}} files",
     "complete": "Upload complete",
@@ -118,6 +154,9 @@
     "versions": "Version History",
     "preview": "Preview",
     "noPreview": "Preview not available"
+  },
+  "preview": {
+    "fileTooLarge": "File is too large for preview"
   },
   "share": {
     "title": "Share {{name}}",

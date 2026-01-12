@@ -1,7 +1,6 @@
 """API endpoints for file previews."""
 
 import uuid
-from typing import Optional
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -12,8 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_db
 from app.core.config import settings
 from app.models.file import FileMetadata
+from app.models.library import Library
 from app.services.preview import PreviewService, PREVIEWABLE_TYPES
-from app.services.storage import MinIOService
+from app.services.storage import StorageService, get_storage_service
 
 logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/preview", tags=["preview"])
@@ -22,16 +22,6 @@ router = APIRouter(prefix="/preview", tags=["preview"])
 def get_preview_service() -> PreviewService:
     """Get preview service dependency."""
     return PreviewService()
-
-
-def get_storage_service() -> MinIOService:
-    """Get storage service dependency."""
-    return MinIOService(
-        endpoint=settings.minio_endpoint,
-        access_key=settings.minio_access_key,
-        secret_key=settings.minio_secret_key,
-        secure=settings.minio_secure,
-    )
 
 
 @router.get(
@@ -61,7 +51,7 @@ async def get_file_preview(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     preview_service: PreviewService = Depends(get_preview_service),
-    storage_service: MinIOService = Depends(get_storage_service),
+    storage_service: StorageService = Depends(get_storage_service),
 ):
     """Get a preview for a file."""
     if not settings.preview_enabled:
@@ -87,33 +77,43 @@ async def get_file_preview(
         )
 
     # Check if preview is supported
-    if not preview_service.can_preview(file.mime_type):
+    if not preview_service.can_preview(file.content_type):
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"Preview not supported for {file.mime_type}",
+            detail=f"Preview not supported for {file.content_type}",
         )
 
     # Check file size
-    if file.size and file.size > settings.preview_max_file_size:
+    if file.size_bytes and file.size_bytes > settings.preview_max_file_size:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="File too large for preview",
         )
 
+    # Get library to find the bucket name
+    library_result = await db.execute(
+        select(Library).where(Library.id == file.library_id)
+    )
+    library = library_result.scalar_one_or_none()
+    if not library:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Library not found",
+        )
+
     try:
         # Get file content from storage
-        bucket_name = f"beacon-lib-{file.library_id}"
-        file_content = await storage_service.get_file_content(
-            bucket_name=bucket_name,
-            object_name=file.storage_key,
+        file_content = await storage_service.download_file(
+            bucket=library.bucket_name,
+            key=file.storage_key,
         )
 
         if thumbnail:
             # Generate thumbnail
             preview_content, preview_mime = await preview_service.generate_thumbnail(
                 file_content=file_content,
-                file_name=file.name,
-                mime_type=file.mime_type,
+                file_name=file.filename,
+                mime_type=file.content_type,
                 width=width,
                 height=height,
             )
@@ -121,15 +121,31 @@ async def get_file_preview(
             # Generate full preview
             preview_content, preview_mime = await preview_service.generate_preview(
                 file_content=file_content,
-                file_name=file.name,
-                mime_type=file.mime_type,
+                file_name=file.filename,
+                mime_type=file.content_type,
             )
+
+        # Encode filename for Content-Disposition header (RFC 5987)
+        from urllib.parse import quote
+
+        preview_filename = f"preview_{file.filename}"
+        # Create ASCII-safe fallback filename
+        ascii_filename = preview_filename.encode(
+            'ascii', 'replace'
+        ).decode('ascii').replace('?', '_')
+        # Create UTF-8 encoded filename for modern browsers
+        utf8_filename = quote(preview_filename, safe='')
+
+        content_disp = (
+            f"inline; filename=\"{ascii_filename}\"; "
+            f"filename*=UTF-8''{utf8_filename}"
+        )
 
         return Response(
             content=preview_content,
             media_type=preview_mime,
             headers={
-                "Content-Disposition": f'inline; filename="preview_{file.name}"',
+                "Content-Disposition": content_disp,
                 "Cache-Control": "private, max-age=3600",
             },
         )
@@ -179,13 +195,16 @@ async def check_preview_availability(
             detail="File not found",
         )
 
-    can_preview = preview_service.can_preview(file.mime_type)
-    needs_conversion = preview_service.needs_conversion(file.mime_type)
-    size_ok = not file.size or file.size <= settings.preview_max_file_size
+    can_preview = preview_service.can_preview(file.content_type)
+    needs_conversion = preview_service.needs_conversion(file.content_type)
+    size_ok = (
+        not file.size_bytes or
+        file.size_bytes <= settings.preview_max_file_size
+    )
 
     return {
         "file_id": str(file_id),
-        "mime_type": file.mime_type,
+        "mime_type": file.content_type,
         "can_preview": can_preview and size_ok and settings.preview_enabled,
         "needs_conversion": needs_conversion,
         "size_ok": size_ok,

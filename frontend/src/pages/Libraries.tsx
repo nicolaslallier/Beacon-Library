@@ -2,28 +2,24 @@
  * Libraries page - List and manage document libraries
  */
 
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Plus,
-  Library,
   Folder,
+  Library,
   MoreVertical,
-  Trash2,
-  Settings,
+  Plus,
   RefreshCw,
-} from 'lucide-react';
+  Settings,
+  Trash2,
+} from "lucide-react";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 
-import { cn, formatBytes, formatDate } from '../lib/utils';
-import {
-  listLibraries,
-  createLibrary,
-  deleteLibrary,
-  Library as LibraryType,
-} from '../services/files';
-import { useAuth, RequireAuth } from '../hooks/useAuth';
+import { RequireAuth } from "../hooks/useAuth";
+import { cn, formatBytes } from "../lib/utils";
+import type { Library as LibraryType } from "../services/files";
+import { createLibrary, deleteLibrary, listLibraries } from "../services/files";
 
 function LibraryCard({ library }: { library: LibraryType }) {
   const navigate = useNavigate();
@@ -34,12 +30,12 @@ function LibraryCard({ library }: { library: LibraryType }) {
   const deleteMutation = useMutation({
     mutationFn: () => deleteLibrary(library.id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['libraries'] });
+      queryClient.invalidateQueries({ queryKey: ["libraries"] });
     },
   });
 
   const handleDelete = () => {
-    if (confirm(t('library.deleteConfirm'))) {
+    if (confirm(t("library.deleteConfirm"))) {
       deleteMutation.mutate();
     }
   };
@@ -47,15 +43,15 @@ function LibraryCard({ library }: { library: LibraryType }) {
   return (
     <div
       className={cn(
-        'relative bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700',
-        'hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all cursor-pointer',
-        'focus-within:ring-2 focus-within:ring-blue-500'
+        "relative bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700",
+        "hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all cursor-pointer",
+        "focus-within:ring-2 focus-within:ring-blue-500"
       )}
     >
       <button
         onClick={() => navigate(`/libraries/${library.id}`)}
         className="w-full p-6 text-left focus:outline-none"
-        aria-label={`${t('accessibility.openLibrary', 'Open')} ${library.name}`}
+        aria-label={`${t("accessibility.openLibrary", "Open")} ${library.name}`}
       >
         <div className="flex items-start gap-4">
           <div className="p-3 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
@@ -73,7 +69,7 @@ function LibraryCard({ library }: { library: LibraryType }) {
             <div className="flex items-center gap-4 mt-3 text-xs text-slate-400 dark:text-slate-500">
               <span className="flex items-center gap-1">
                 <Folder className="w-3 h-3" />
-                {library.file_count} {t('common.files', 'files')}
+                {library.file_count} {t("common.files", "files")}
               </span>
               <span>{formatBytes(library.total_size_bytes)}</span>
             </div>
@@ -89,7 +85,7 @@ function LibraryCard({ library }: { library: LibraryType }) {
             setShowMenu(!showMenu);
           }}
           className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-          aria-label={t('common.actions')}
+          aria-label={t("common.actions")}
           aria-expanded={showMenu}
         >
           <MoreVertical className="w-4 h-4 text-slate-400" />
@@ -105,7 +101,7 @@ function LibraryCard({ library }: { library: LibraryType }) {
               className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
             >
               <Settings className="w-4 h-4" />
-              {t('nav.settings')}
+              {t("nav.settings")}
             </button>
             <button
               onClick={() => {
@@ -115,7 +111,7 @@ function LibraryCard({ library }: { library: LibraryType }) {
               className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
             >
               <Trash2 className="w-4 h-4" />
-              {t('common.delete')}
+              {t("common.delete")}
             </button>
           </div>
         )}
@@ -142,8 +138,8 @@ function CreateLibraryDialog({
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [mcpEnabled, setMcpEnabled] = useState(false);
 
   const createMutation = useMutation({
@@ -154,10 +150,10 @@ function CreateLibraryDialog({
         mcp_write_enabled: mcpEnabled,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['libraries'] });
+      queryClient.invalidateQueries({ queryKey: ["libraries"] });
       onClose();
-      setName('');
-      setDescription('');
+      setName("");
+      setDescription("");
       setMcpEnabled(false);
     },
   });
@@ -179,7 +175,7 @@ function CreateLibraryDialog({
           id="create-library-title"
           className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-4"
         >
-          {t('library.createTitle')}
+          {t("library.createTitle")}
         </h2>
 
         <form
@@ -194,14 +190,14 @@ function CreateLibraryDialog({
                 htmlFor="library-name"
                 className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
               >
-                {t('library.name')}
+                {t("library.name")}
               </label>
               <input
                 id="library-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={t('library.namePlaceholder')}
+                placeholder={t("library.namePlaceholder")}
                 required
                 className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -212,13 +208,13 @@ function CreateLibraryDialog({
                 htmlFor="library-description"
                 className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
               >
-                {t('library.description')}
+                {t("library.description")}
               </label>
               <textarea
                 id="library-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder={t('library.descriptionPlaceholder')}
+                placeholder={t("library.descriptionPlaceholder")}
                 rows={3}
                 className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -237,10 +233,10 @@ function CreateLibraryDialog({
                   htmlFor="mcp-enabled"
                   className="text-sm font-medium text-slate-700 dark:text-slate-300"
                 >
-                  {t('library.mcpWriteEnabled')}
+                  {t("library.mcpWriteEnabled")}
                 </label>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {t('library.mcpWriteEnabledHelp')}
+                  {t("library.mcpWriteEnabledHelp")}
                 </p>
               </div>
             </div>
@@ -252,14 +248,16 @@ function CreateLibraryDialog({
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
             >
-              {t('common.cancel')}
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
               disabled={!name || createMutation.isPending}
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {createMutation.isPending ? t('common.loading') : t('common.create')}
+              {createMutation.isPending
+                ? t("common.loading")
+                : t("common.create")}
             </button>
           </div>
         </form>
@@ -278,7 +276,7 @@ function LibrariesContent() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ['libraries'],
+    queryKey: ["libraries"],
     queryFn: () => listLibraries(),
   });
 
@@ -293,12 +291,12 @@ function LibrariesContent() {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-64">
-        <p className="text-red-500">{t('common.error')}</p>
+        <p className="text-red-500">{t("common.error")}</p>
         <button
           onClick={() => refetch()}
           className="mt-2 px-4 py-2 bg-red-100 dark:bg-red-900 rounded hover:bg-red-200 dark:hover:bg-red-800"
         >
-          {t('common.retry')}
+          {t("common.retry")}
         </button>
       </div>
     );
@@ -313,10 +311,10 @@ function LibrariesContent() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">
-              {t('library.title')}
+              {t("library.title")}
             </h1>
             <p className="text-slate-500 dark:text-slate-400 mt-1">
-              {t('library.subtitle', 'Manage your document libraries')}
+              {t("library.subtitle", "Manage your document libraries")}
             </p>
           </div>
           <button
@@ -324,7 +322,7 @@ function LibrariesContent() {
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
           >
             <Plus className="w-5 h-5" />
-            {t('library.create')}
+            {t("library.create")}
           </button>
         </div>
 
@@ -333,17 +331,17 @@ function LibrariesContent() {
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Library className="w-16 h-16 text-slate-300 dark:text-slate-600 mb-4" />
             <h2 className="text-xl font-semibold text-slate-700 dark:text-slate-300">
-              {t('library.empty')}
+              {t("library.empty")}
             </h2>
             <p className="text-slate-500 dark:text-slate-400 mt-2 max-w-md">
-              {t('library.emptyDescription')}
+              {t("library.emptyDescription")}
             </p>
             <button
               onClick={() => setShowCreateDialog(true)}
               className="mt-6 flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg"
             >
               <Plus className="w-5 h-5" />
-              {t('library.create')}
+              {t("library.create")}
             </button>
           </div>
         ) : (
@@ -364,9 +362,17 @@ function LibrariesContent() {
 }
 
 export default function Libraries() {
-  return (
-    <RequireAuth>
-      <LibrariesContent />
-    </RequireAuth>
-  );
+  // Check if auth is enabled
+  const enableAuth = import.meta.env.VITE_ENABLE_AUTH === "true";
+
+  if (enableAuth) {
+    return (
+      <RequireAuth>
+        <LibrariesContent />
+      </RequireAuth>
+    );
+  }
+
+  // Without auth, just render the content directly
+  return <LibrariesContent />;
 }

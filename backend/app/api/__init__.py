@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api import libraries, directories, files, browse, shares, notifications, audit, trash, mcp, search, preview, realtime
+from app.api import admin, libraries, directories, files, browse, shares, notifications, audit, trash, mcp, search, preview, realtime
 
 # Main API router
 api_router = APIRouter()
@@ -59,4 +59,8 @@ api_router.include_router(
 api_router.include_router(
     realtime.router,
     tags=["Realtime"],
+)
+api_router.include_router(
+    admin.router,
+    tags=["Admin"],
 )

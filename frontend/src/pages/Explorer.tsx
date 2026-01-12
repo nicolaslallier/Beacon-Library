@@ -9,7 +9,7 @@ import { ArrowLeft, RefreshCw } from 'lucide-react';
 
 import { FileExplorer } from '../components/explorer/FileExplorer';
 import { getLibrary } from '../services/files';
-import { useAuth, RequireAuth } from '../hooks/useAuth';
+import { RequireAuth } from '../hooks/useAuth';
 
 function ExplorerContent() {
   const { libraryId } = useParams<{ libraryId: string }>();

@@ -153,6 +153,12 @@ class Settings(BaseSettings):
         default=None,
         description="Expected JWT audience (defaults to client_id)",
     )
+    
+    # Authentication control
+    enable_auth: bool = Field(
+        default=True,
+        description="Enable authentication (set to False for development)",
+    )
 
     @property
     def keycloak_issuer(self) -> str:
@@ -208,6 +214,30 @@ class Settings(BaseSettings):
     def ollama_url(self) -> str:
         """Construct the Ollama URL."""
         return f"http://{self.ollama_host}:{self.ollama_port}"
+
+    # ==========================================================================
+    # Vector Search Chunking
+    # ==========================================================================
+    chunk_size_code: int = Field(
+        default=1500,
+        description="Target chunk size in tokens for code files",
+    )
+    chunk_size_docs: int = Field(
+        default=1000,
+        description="Target chunk size in tokens for documentation files",
+    )
+    chunk_overlap: int = Field(
+        default=200,
+        description="Overlap in tokens between consecutive chunks",
+    )
+    max_chunks_per_file: int = Field(
+        default=50,
+        description="Maximum number of chunks per file",
+    )
+    enable_code_analysis: bool = Field(
+        default=True,
+        description="Enable advanced code analysis for indexing",
+    )
 
     # ==========================================================================
     # File Preview (Gotenberg/LibreOffice)

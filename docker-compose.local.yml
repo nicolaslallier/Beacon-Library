@@ -13,6 +13,7 @@ services:
     environment:
       ENV: local
       DATABASE_URL: postgres://beacon_user:beacon_password@postgres:5432/beacon_library
+      ENABLE_AUTH: ${ENABLE_AUTH:-false}  # Disable auth for local development
     command: ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     expose:
       - "8000"
@@ -32,7 +33,7 @@ services:
     environment:
       ENV: local
       # API_BASE_URL: http://localhost:8000
-    command: ["npm", "run", "dev", "--", "--host"]
+    command: ["npm", "run", "dev", "--", "--host", "--port", "3000"]
     expose:
       - "3000"
     depends_on:

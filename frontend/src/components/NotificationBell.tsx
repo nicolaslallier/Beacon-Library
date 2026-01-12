@@ -14,10 +14,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   notificationsApi,
-  Notification,
   getNotificationIcon,
   formatNotificationTime,
 } from '../services/notifications';
+import type { Notification } from '../services/notifications';
 import { cn } from '../lib/utils';
 
 export function NotificationBell() {

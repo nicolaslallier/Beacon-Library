@@ -1,0 +1,146 @@
+# =============================================================================
+# Admin Services for Beacon Library
+# =============================================================================
+# Usage:
+#   docker compose -f docker-compose.yml -f admin/docker-compose.admin.yml --profile admin up -d
+#   OR use: make admin-up
+#
+# This file extends the main docker-compose.yml with admin/management UIs
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # pgAdmin 4 - PostgreSQL Management
+  # ---------------------------------------------------------------------------
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: beacon-library-pgadmin
+    profiles: ["admin"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@beacon.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./admin/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - beacon-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-O", "-", "http://localhost:80/misc/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Redis Commander - Redis Cache Management
+  # ---------------------------------------------------------------------------
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: beacon-library-redis-commander
+    profiles: ["admin"]
+    environment:
+      REDIS_HOSTS: local:redis:6379
+      HTTP_USER: ${REDIS_COMMANDER_USER:-}
+      HTTP_PASSWORD: ${REDIS_COMMANDER_PASSWORD:-}
+    ports:
+      - "${REDIS_COMMANDER_PORT:-8081}:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - beacon-network
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # ChromaDB Admin - Vector Database Management
+  # ---------------------------------------------------------------------------
+  # DISABLED: fengzhichao/chromadb-admin doesn't support ChromaDB v2 API (1.0+)
+  # The v1 API was removed in ChromaDB 1.0, causing 500 errors.
+  # Use the backend /api/admin/chromadb/* endpoints instead, or access
+  # ChromaDB directly at http://chromadb:8000/api/v2/
+  # ---------------------------------------------------------------------------
+  # chromadb-admin:
+  #   image: fengzhichao/chromadb-admin:latest
+  #   container_name: beacon-library-chromadb-admin
+  #   profiles: ["admin"]
+  #   environment:
+  #     CHROMADB_URL: http://chromadb:8000
+  #   ports:
+  #     - "${CHROMADB_ADMIN_PORT:-8083}:3001"
+  #   depends_on:
+  #     chromadb:
+  #       condition: service_healthy
+  #   networks:
+  #     - beacon-network
+  #   restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Ollama WebUI (Open WebUI) - LLM Model Management
+  # ---------------------------------------------------------------------------
+  ollama-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: beacon-library-ollama-webui
+    profiles: ["admin"]
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      WEBUI_AUTH: "false"
+      ENABLE_SIGNUP: "false"
+      ENABLE_LOGIN_FORM: "false"
+    ports:
+      - "${OLLAMA_WEBUI_PORT:-8082}:8080"
+    volumes:
+      - ollama_webui_data:/app/backend/data
+    depends_on:
+      - ollama
+    networks:
+      - beacon-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Nginx Proxy Manager - Central Admin Dashboard & Reverse Proxy
+  # ---------------------------------------------------------------------------
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: beacon-library-npm
+    profiles: ["admin"]
+    ports:
+      - "${NPM_HTTP_PORT:-8880}:80"      # HTTP
+      - "${NPM_HTTPS_PORT:-8443}:443"    # HTTPS
+      - "${NPM_ADMIN_PORT:-8888}:81"     # Admin UI
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    networks:
+      - beacon-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:81/api/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# =============================================================================
+# Volumes for Admin Services
+# =============================================================================
+volumes:
+  pgadmin_data:
+    driver: local
+  ollama_webui_data:
+    driver: local
+  npm_data:
+    driver: local
+  npm_letsencrypt:
+    driver: local

@@ -1,4 +1,39 @@
 {
+  "search": {
+    "title": "Recherche intelligente",
+    "subtitle": "Trouvez des documents en langage naturel grâce à l'IA",
+    "placeholder": "Rechercher des documents, sujets ou contenus...",
+    "searching": "Recherche en cours...",
+    "error": "La recherche a échoué. Veuillez réessayer.",
+    "resultsCount": "{{count}} résultat(s) trouvé(s)",
+    "resultsCount_one": "1 résultat trouvé",
+    "resultsCount_other": "{{count}} résultats trouvés",
+    "sortedByRelevance": "Trié par pertinence",
+    "relevance": "Pertinence",
+    "noResults": "Aucun résultat",
+    "noResultsDesc": "Essayez d'autres mots-clés ou ajustez vos filtres",
+    "startSearching": "Commencez votre recherche",
+    "startSearchingDesc": "Entrez des mots-clés pour trouver des documents dans toutes vos bibliothèques grâce à la recherche sémantique",
+    "minLength": "Veuillez entrer au moins 2 caractères",
+    "filters": {
+      "title": "Filtres",
+      "clear": "Effacer les filtres",
+      "library": "Bibliothèque",
+      "allLibraries": "Toutes les bibliothèques",
+      "fileType": "Type de fichier",
+      "allTypes": "Tous les types",
+      "images": "Images",
+      "text": "Documents texte",
+      "office": "Documents Office",
+      "videos": "Vidéos",
+      "audio": "Audio"
+    },
+    "semanticInfo": {
+      "title": "Recherche sémantique",
+      "description": "Notre recherche alimentée par l'IA comprend le sens de votre requête, pas seulement les mots-clés. Essayez de rechercher des concepts, des sujets ou posez des questions sur vos documents."
+    },
+    "goToFolder": "Aller au dossier"
+  },
   "common": {
     "loading": "Chargement...",
     "error": "Une erreur s'est produite",
@@ -83,6 +118,7 @@
     "dragDrop": "Glissez-déposez des fichiers ici",
     "or": "ou",
     "browse": "Parcourir les fichiers",
+    "browseFolder": "Parcourir un dossier",
     "uploading": "Téléversement...",
     "progress": "{{current}} sur {{total}} fichiers",
     "complete": "Téléversement terminé",
@@ -115,6 +151,9 @@
     "versions": "Historique des versions",
     "preview": "Aperçu",
     "noPreview": "Aperçu non disponible"
+  },
+  "preview": {
+    "fileTooLarge": "Le fichier est trop volumineux pour l'aperçu"
   },
   "share": {
     "title": "Partager",

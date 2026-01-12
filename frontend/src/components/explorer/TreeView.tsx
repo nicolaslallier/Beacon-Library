@@ -15,7 +15,8 @@ import {
 } from 'lucide-react';
 
 import { cn } from '../../lib/utils';
-import { browseLibrary, BrowseItem } from '../../services/files';
+import { browseLibrary } from '../../services/files';
+import type { BrowseItem } from '../../services/files';
 
 interface TreeViewProps {
   libraryId: string;

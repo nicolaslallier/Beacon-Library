@@ -99,14 +99,36 @@ export interface DuplicateConflict {
 
 // API client with auth header injection
 const apiClient = axios.create({
-  baseURL: config.apiUrl,
+  baseURL: config.api.baseUrl,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/vnd.beacon.v1+json',
   },
 });
 
-// Add auth token to requests
+// Function to get Keycloak token - will be set by App component
+let getTokenFn: (() => string | null) | null = null;
+
+export function setTokenGetter(fn: () => string | null) {
+  getTokenFn = fn;
+}
+
+// Request interceptor to add token dynamically
+apiClient.interceptors.request.use(
+  (config) => {
+    // Try to get token dynamically first, then fall back to default header
+    const token = getTokenFn ? getTokenFn() : null;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add auth token to requests (kept for backward compatibility)
 export function setAuthToken(token: string | null) {
   if (token) {
     apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -124,14 +146,14 @@ export async function listLibraries(page = 1, pageSize = 50): Promise<{
   total: number;
   has_more: boolean;
 }> {
-  const response = await apiClient.get('/api/libraries', {
+  const response = await apiClient.get('/libraries', {
     params: { page, page_size: pageSize },
   });
   return response.data;
 }
 
 export async function getLibrary(libraryId: string): Promise<Library> {
-  const response = await apiClient.get(`/api/libraries/${libraryId}`);
+  const response = await apiClient.get(`/libraries/${libraryId}`);
   return response.data;
 }
 
@@ -140,7 +162,7 @@ export async function createLibrary(data: {
   description?: string;
   mcp_write_enabled?: boolean;
 }): Promise<Library> {
-  const response = await apiClient.post('/api/libraries', data);
+  const response = await apiClient.post('/libraries', data);
   return response.data;
 }
 
@@ -152,12 +174,12 @@ export async function updateLibrary(
     mcp_write_enabled: boolean;
   }>
 ): Promise<Library> {
-  const response = await apiClient.patch(`/api/libraries/${libraryId}`, data);
+  const response = await apiClient.patch(`/libraries/${libraryId}`, data);
   return response.data;
 }
 
 export async function deleteLibrary(libraryId: string): Promise<void> {
-  await apiClient.delete(`/api/libraries/${libraryId}`);
+  await apiClient.delete(`/libraries/${libraryId}`);
 }
 
 // ============================================================================
@@ -175,7 +197,7 @@ export async function browseLibrary(
     sortOrder?: 'asc' | 'desc';
   } = {}
 ): Promise<BrowseResponse> {
-  const response = await apiClient.get(`/api/libraries/${libraryId}/browse`, {
+  const response = await apiClient.get(`/libraries/${libraryId}/browse`, {
     params: {
       path: options.path || '/',
       directory_id: options.directoryId,
@@ -197,7 +219,7 @@ export async function createDirectory(
   data: { name: string; parent_id?: string }
 ): Promise<Directory> {
   const response = await apiClient.post(
-    `/api/libraries/${libraryId}/directories`,
+    `/libraries/${libraryId}/directories`,
     data
   );
   return response.data;
@@ -209,7 +231,7 @@ export async function renameDirectory(
   name: string
 ): Promise<Directory> {
   const response = await apiClient.patch(
-    `/api/libraries/${libraryId}/directories/${directoryId}`,
+    `/libraries/${libraryId}/directories/${directoryId}`,
     { name }
   );
   return response.data;
@@ -221,7 +243,7 @@ export async function moveDirectory(
   newParentId?: string
 ): Promise<Directory> {
   const response = await apiClient.post(
-    `/api/libraries/${libraryId}/directories/${directoryId}/move`,
+    `/libraries/${libraryId}/directories/${directoryId}/move`,
     { new_parent_id: newParentId }
   );
   return response.data;
@@ -232,7 +254,7 @@ export async function deleteDirectory(
   directoryId: string
 ): Promise<void> {
   await apiClient.delete(
-    `/api/libraries/${libraryId}/directories/${directoryId}`
+    `/libraries/${libraryId}/directories/${directoryId}`
   );
 }
 
@@ -241,7 +263,7 @@ export async function deleteDirectory(
 // ============================================================================
 
 export async function getFile(fileId: string): Promise<FileMetadata> {
-  const response = await apiClient.get(`/api/files/${fileId}`);
+  const response = await apiClient.get(`/files/${fileId}`);
   return response.data;
 }
 
@@ -249,19 +271,75 @@ export async function renameFile(
   fileId: string,
   filename: string
 ): Promise<FileMetadata> {
-  const response = await apiClient.patch(`/api/files/${fileId}`, { filename });
+  const response = await apiClient.patch(`/files/${fileId}`, { filename });
   return response.data;
 }
 
 export async function deleteFile(fileId: string): Promise<void> {
-  await apiClient.delete(`/api/files/${fileId}`);
+  await apiClient.delete(`/files/${fileId}`);
 }
 
 export async function downloadFile(fileId: string): Promise<Blob> {
-  const response = await apiClient.get(`/api/files/${fileId}/download`, {
+  const response = await apiClient.get(`/files/${fileId}/download`, {
     responseType: 'blob',
   });
   return response.data;
+}
+
+// ============================================================================
+// Preview API
+// ============================================================================
+
+export interface PreviewAvailability {
+  file_id: string;
+  mime_type: string;
+  can_preview: boolean;
+  needs_conversion: boolean;
+  size_ok: boolean;
+  service_enabled: boolean;
+}
+
+export interface SupportedPreviewTypes {
+  supported_types: string[];
+  max_file_size: number;
+  enabled: boolean;
+}
+
+export async function getSupportedPreviewTypes(): Promise<SupportedPreviewTypes> {
+  const response = await apiClient.get('/preview/supported');
+  return response.data;
+}
+
+export async function checkPreviewAvailability(
+  fileId: string
+): Promise<PreviewAvailability> {
+  const response = await apiClient.get(`/preview/check/${fileId}`);
+  return response.data;
+}
+
+export async function getFilePreview(
+  fileId: string,
+  options: {
+    thumbnail?: boolean;
+    width?: number;
+    height?: number;
+  } = {}
+): Promise<Blob> {
+  const response = await apiClient.get(`/preview/file/${fileId}`, {
+    params: {
+      thumbnail: options.thumbnail || false,
+      width: options.width || 200,
+      height: options.height || 200,
+    },
+    responseType: 'blob',
+  });
+  return response.data;
+}
+
+export function getPreviewUrl(fileId: string, thumbnail = false): string {
+  const baseUrl = apiClient.defaults.baseURL || '';
+  const params = thumbnail ? '?thumbnail=true' : '';
+  return `${baseUrl}/preview/file/${fileId}${params}`;
 }
 
 // ============================================================================
@@ -278,7 +356,7 @@ export async function initUpload(
     onDuplicate?: 'ask' | 'overwrite' | 'rename';
   }
 ): Promise<UploadInitResponse | DuplicateConflict> {
-  const response = await apiClient.post('/api/files/upload/init', null, {
+  const response = await apiClient.post('/files/upload/init', null, {
     params: {
       library_id: libraryId,
       filename: options.filename,
@@ -299,7 +377,7 @@ export async function uploadPart(
   const formData = new FormData();
   formData.append('file', data);
 
-  const response = await apiClient.post('/api/files/upload/part', formData, {
+  const response = await apiClient.post('/files/upload/part', formData, {
     params: {
       upload_id: uploadId,
       part_number: partNumber,
@@ -316,7 +394,7 @@ export async function completeUpload(
   parts: Array<{ part_number: number; etag: string; size_bytes: number }>,
   checksum?: string
 ): Promise<{ file: FileMetadata }> {
-  const response = await apiClient.post('/api/files/upload/complete', {
+  const response = await apiClient.post('/files/upload/complete', {
     upload_id: uploadId,
     parts,
     checksum_sha256: checksum,

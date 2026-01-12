@@ -3,7 +3,7 @@ import axiosRetry from 'axios-retry';
 import { v4 as uuidv4 } from 'uuid';
 
 // Environment-based API configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 const API_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT) || 10000;
 
 // Create axios instance with base configuration
@@ -31,6 +31,13 @@ axiosRetry(apiClient, {
   },
 });
 
+// Function to get Keycloak token - will be set by useAuth hook
+let getTokenFn: (() => string | null) | null = null;
+
+export function setTokenGetter(fn: () => string | null) {
+  getTokenFn = fn;
+}
+
 // Request interceptor for adding auth tokens and request ID
 apiClient.interceptors.request.use(
   (config) => {
@@ -38,7 +45,8 @@ apiClient.interceptors.request.use(
     config.headers['X-Request-ID'] = uuidv4();
 
     // Add auth token if available
-    const token = localStorage.getItem('auth_token');
+    // First try to get from Keycloak via the getter function
+    const token = getTokenFn ? getTokenFn() : localStorage.getItem('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }

@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  mcp-agent:
+    build: .
+    container_name: beacon-mcp-agent
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # LM Studio - adjust to your local IP
+      LMSTUDIO_URL: ${LMSTUDIO_URL:-http://192.168.2.35:1234}
+      LMSTUDIO_MODEL: ${LMSTUDIO_MODEL:-default}
+      
+      # Beacon Library MCP
+      BEACON_MCP_URL: ${BEACON_MCP_URL:-https://beacon-library.famillelallier.net/api/mcp}
+      AGENT_ID: ${AGENT_ID:-lmstudio-agent}
+      
+      # Server
+      HOST: "0.0.0.0"
+      PORT: "8080"
+    
+    # If running on same Docker network as Beacon Library
+    # networks:
+    #   - beacon-library_default
+
+# Uncomment if connecting to Beacon Library's Docker network
+# networks:
+#   beacon-library_default:
+#     external: true

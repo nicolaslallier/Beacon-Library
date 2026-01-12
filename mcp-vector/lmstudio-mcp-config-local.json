@@ -1,0 +1,113 @@
+{
+  "mcpServers": {
+    "beacon-vector-local": {
+      "type": "http",
+      "url": "http://localhost:8181/mcp-vector",
+      "headers": {
+        "X-Agent-ID": "lmstudio-local"
+      },
+      "endpoints": {
+        "tools": "/mcp/tools",
+        "callTool": "/mcp/tools/{tool_name}",
+        "sse": "/mcp/sse"
+      },
+      "description": "Beacon Library Vector Search (Local) - Semantic search and RAG capabilities",
+      "tools": [
+        {
+          "name": "vector.query",
+          "description": "Semantic search by similarity. Use this FIRST when searching for information in documents. Returns relevant chunks with metadata (path, line numbers) for traceability.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "description": "Query text for semantic search"
+              },
+              "top_k": {
+                "type": "integer",
+                "description": "Number of results to return (default: 8, max: 50)",
+                "default": 8
+              },
+              "filters": {
+                "type": "object",
+                "description": "Optional metadata filters",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "File path filter (exact or prefix)"
+                  },
+                  "library_id": {
+                    "type": "string",
+                    "description": "Library UUID to scope search"
+                  },
+                  "language": {
+                    "type": "string",
+                    "description": "Programming language filter (python, javascript, etc.)"
+                  },
+                  "chunk_type": {
+                    "type": "string",
+                    "description": "Chunk type (function, class, section, etc.)"
+                  }
+                }
+              }
+            },
+            "required": ["text"]
+          }
+        },
+        {
+          "name": "vector.get",
+          "description": "Fetch specific chunks by their IDs. Use after vector.query to get more context.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of chunk IDs to retrieve"
+              }
+            },
+            "required": ["ids"]
+          }
+        },
+        {
+          "name": "vector.upsert_documents",
+          "description": "Add or update document chunks in the vector store. Requires write permission.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "chunks": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of chunk texts to upsert"
+              },
+              "metadata": {
+                "type": "array",
+                "description": "Metadata for each chunk (aligned 1:1 with chunks)"
+              }
+            },
+            "required": ["chunks", "metadata"]
+          }
+        },
+        {
+          "name": "vector.delete",
+          "description": "Delete chunks by filter (doc_id, path_prefix, or library_id). Requires write permission.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "where": {
+                "type": "object",
+                "description": "Filter conditions for deletion",
+                "properties": {
+                  "doc_id": {"type": "string"},
+                  "path_prefix": {"type": "string"},
+                  "library_id": {"type": "string"}
+                }
+              }
+            },
+            "required": ["where"]
+          }
+        }
+      ]
+    }
+  }
+}

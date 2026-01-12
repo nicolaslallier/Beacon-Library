@@ -296,6 +296,25 @@ async def get_current_user(
         async def protected_route(user: UserContext = Depends(get_current_user)):
             ...
     """
+    # Check if authentication is disabled (development mode)
+    if not settings.enable_auth:
+        # Create a mock admin user for development
+        logger.warning("authentication_disabled", message="Running with authentication disabled - DEVELOPMENT ONLY")
+        return UserContext(
+            user_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+            username="dev-user",
+            email="dev@example.com",
+            name="Development User",
+            roles={"library-admin", "library-user"},
+            groups=set(),
+            token="dev-token",
+            token_exp=datetime.utcnow(),
+            is_guest=False,
+            correlation_id=uuid.uuid4(),
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+    
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

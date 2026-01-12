@@ -11,11 +11,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import {
-  sharesApi,
-  SharePublicInfo,
-  ShareAccessResponse,
-} from '../services/shares';
+import { sharesApi } from '../services/shares';
+import type { ShareAccessResponse } from '../services/shares';
 import { cn } from '../lib/utils';
 
 export function ShareAccess() {
@@ -32,7 +29,6 @@ export function ShareAccess() {
     data: shareInfo,
     isLoading,
     isError,
-    error: fetchError,
   } = useQuery({
     queryKey: ['share-public', token],
     queryFn: () => sharesApi.getPublicInfo(token!),

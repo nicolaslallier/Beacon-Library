@@ -89,8 +89,12 @@ class APIVersionMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         # Add version to response Content-Type
+        # But preserve original content type for SSE and streaming responses
         if response.status_code < 400:
-            response.headers["Content-Type"] = media_type
+            original_content_type = response.headers.get("Content-Type", "")
+            # Don't override SSE or streaming content types
+            if not original_content_type.startswith(("text/event-stream", "text/plain")):
+                response.headers["Content-Type"] = media_type
             response.headers["X-API-Version"] = version
 
         return response

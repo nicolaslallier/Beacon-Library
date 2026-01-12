@@ -1,0 +1,15 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Beacon Library DB",
+      "Group": "Beacon Library",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "beacon_library",
+      "Username": "beacon_user",
+      "PassFile": "/pgadmin4/pgpass",
+      "SSLMode": "prefer",
+      "Comment": "Beacon Library PostgreSQL Database"
+    }
+  }
+}

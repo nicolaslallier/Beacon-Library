@@ -26,6 +26,23 @@ from app.schemas.browse import (
     BrowseItem,
     BrowseResponse,
 )
+from app.schemas.admin import (
+    SettingsResponse,
+    SettingsUpdate,
+    ServiceHealth,
+    ServicesHealthResponse,
+    ServicesStatsResponse,
+    ServiceStatus,
+    ChromaCollectionsResponse,
+    ChromaReindexRequest,
+    ChromaReindexResponse,
+    OllamaModelsResponse,
+    OllamaPullRequest,
+    OllamaPullResponse,
+    MaintenanceCleanupRequest,
+    MaintenanceCleanupResponse,
+    MaintenanceStatsResponse,
+)
 
 __all__ = [
     # Library
@@ -50,4 +67,20 @@ __all__ = [
     # Browse
     "BrowseItem",
     "BrowseResponse",
+    # Admin
+    "SettingsResponse",
+    "SettingsUpdate",
+    "ServiceHealth",
+    "ServicesHealthResponse",
+    "ServicesStatsResponse",
+    "ServiceStatus",
+    "ChromaCollectionsResponse",
+    "ChromaReindexRequest",
+    "ChromaReindexResponse",
+    "OllamaModelsResponse",
+    "OllamaPullRequest",
+    "OllamaPullResponse",
+    "MaintenanceCleanupRequest",
+    "MaintenanceCleanupResponse",
+    "MaintenanceStatsResponse",
 ]

@@ -20,7 +20,7 @@ interface BreadcrumbProps {
 }
 
 export function Breadcrumb({ breadcrumb, onNavigate }: BreadcrumbProps) {
-  const { t } = useTranslation();
+  const { t: _t } = useTranslation(); // Reserved for future i18n usage
 
   return (
     <nav

@@ -17,7 +17,7 @@ from app.schemas.trash import (
     TrashListResponse,
 )
 from app.services.audit import AuditService
-from app.services.storage import MinIOService
+from app.services.storage import StorageService
 from app.services.trash import TrashService
 
 logger = structlog.get_logger(__name__)

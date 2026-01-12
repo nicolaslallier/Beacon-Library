@@ -3,7 +3,7 @@
  * WCAG AAA compliant
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDropzone } from 'react-dropzone';
 import {
@@ -16,12 +16,10 @@ import {
   Loader2,
 } from 'lucide-react';
 
+import axios from 'axios';
 import { cn, formatBytes } from '../../lib/utils';
-import {
-  uploadFile,
-  UploadProgress,
-  DuplicateConflict,
-} from '../../services/files';
+import { browseLibrary, createDirectory, uploadFile } from '../../services/files';
+import type { UploadProgress, DuplicateConflict } from '../../services/files';
 
 interface UploadDialogProps {
   open: boolean;
@@ -51,6 +49,8 @@ export function UploadDialog({
   const [uploads, setUploads] = useState<FileUpload[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const abortController = useRef<AbortController | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const directoryIdCache = useMemo(() => new Map<string, string>(), []);
 
   // Handle file drop
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -67,6 +67,112 @@ export function UploadDialog({
     onDrop,
     multiple: true,
   });
+
+  const normalizeRelativePath = useCallback((value: string): string => {
+    // Normalize browser-provided paths to a safe relative POSIX-ish path
+    let p = value.replaceAll('\\', '/').trim();
+    while (p.startsWith('/')) p = p.slice(1);
+    while (p.startsWith('./')) p = p.slice(2);
+    // Drop any parent traversal to avoid escaping the intended target
+    const parts = p.split('/').filter((seg) => seg && seg !== '.' && seg !== '..');
+    return parts.join('/');
+  }, []);
+
+  const getFileRelativePath = useCallback(
+    (file: File): string => {
+      const anyFile = file as any;
+      const rel =
+        (typeof anyFile.webkitRelativePath === 'string' && anyFile.webkitRelativePath) ||
+        (typeof anyFile.path === 'string' && anyFile.path) ||
+        '';
+      return rel ? normalizeRelativePath(rel) : '';
+    },
+    [normalizeRelativePath]
+  );
+
+  const getFileLabel = useCallback(
+    (file: File): string => {
+      const rel = getFileRelativePath(file);
+      return rel || file.name;
+    },
+    [getFileRelativePath]
+  );
+
+  const ensureDirectoryPath = useCallback(
+    async (relativeDirPath: string): Promise<string | undefined> => {
+      const normalized = normalizeRelativePath(relativeDirPath);
+      if (!normalized) return directoryId;
+
+      const segments = normalized.split('/').filter(Boolean);
+      let parentId: string | undefined = directoryId;
+
+      const cacheKeyFor = (p: string | undefined, name: string) =>
+        `${libraryId}::${p ?? 'root'}::${name}`;
+
+      const findExistingChildDirId = async (
+        p: string | undefined,
+        name: string
+      ): Promise<string | null> => {
+        let page = 1;
+        while (true) {
+          const resp = await browseLibrary(libraryId, {
+            directoryId: p,
+            page,
+            pageSize: 200,
+            sortBy: 'name',
+            sortOrder: 'asc',
+          });
+          const match = resp.items.find(
+            (it) => it.type === 'directory' && it.name === name
+          );
+          if (match) return match.id;
+          if (!resp.has_more) return null;
+          page += 1;
+        }
+      };
+
+      for (const name of segments) {
+        const cacheKey = cacheKeyFor(parentId, name);
+        const cachedId = directoryIdCache.get(cacheKey);
+        if (cachedId) {
+          parentId = cachedId;
+          continue;
+        }
+
+        try {
+          const created = await createDirectory(libraryId, {
+            name,
+            parent_id: parentId,
+          });
+          directoryIdCache.set(cacheKey, created.id);
+          parentId = created.id;
+        } catch (err) {
+          if (axios.isAxiosError(err) && err.response?.status === 409) {
+            const existingId = await findExistingChildDirId(parentId, name);
+            if (!existingId) {
+              throw new Error(
+                `Directory "${name}" already exists but could not be resolved`
+              );
+            }
+            directoryIdCache.set(cacheKey, existingId);
+            parentId = existingId;
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      return parentId;
+    },
+    [
+      browseLibrary,
+      createDirectory,
+      directoryId,
+      directoryIdCache,
+      libraryId,
+      normalizeRelativePath,
+    ]
+  );
 
   // Remove a file from the queue
   const removeFile = useCallback((id: string) => {
@@ -89,8 +195,11 @@ export function UploadDialog({
       );
 
       try {
+        const rel = getFileRelativePath(upload.file);
+        const relDir = rel.includes('/') ? rel.split('/').slice(0, -1).join('/') : '';
+        const targetDirectoryId = await ensureDirectoryPath(relDir);
         await uploadFile(libraryId, upload.file, {
-          directoryId,
+          directoryId: targetDirectoryId,
           onDuplicate: action,
           onProgress: (progress: UploadProgress) => {
             setUploads((prev) =>
@@ -116,7 +225,7 @@ export function UploadDialog({
         );
       }
     },
-    [libraryId, directoryId, removeFile]
+    [ensureDirectoryPath, getFileRelativePath, libraryId, removeFile]
   );
 
   // Start uploading all files
@@ -136,8 +245,11 @@ export function UploadDialog({
       );
 
       try {
+        const rel = getFileRelativePath(upload.file);
+        const relDir = rel.includes('/') ? rel.split('/').slice(0, -1).join('/') : '';
+        const targetDirectoryId = await ensureDirectoryPath(relDir);
         const result = await uploadFile(libraryId, upload.file, {
-          directoryId,
+          directoryId: targetDirectoryId,
           onDuplicate: 'ask',
           onProgress: (progress: UploadProgress) => {
             setUploads((prev) =>
@@ -181,7 +293,7 @@ export function UploadDialog({
 
     setIsUploading(false);
     onUploadComplete();
-  }, [uploads, libraryId, directoryId, onUploadComplete]);
+  }, [uploads, libraryId, onUploadComplete, ensureDirectoryPath, getFileRelativePath]);
 
   // Cancel all uploads
   const cancelUpload = useCallback(() => {
@@ -224,6 +336,21 @@ export function UploadDialog({
         aria-labelledby="upload-dialog-title"
         aria-modal="true"
       >
+        {/* Folder picker (keeps directory structure via webkitRelativePath) */}
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          {...({ webkitdirectory: '' } as any)}
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files || []);
+            if (files.length) onDrop(files);
+            e.target.value = '';
+          }}
+        />
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
           <h2
@@ -264,6 +391,16 @@ export function UploadDialog({
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             {t('upload.or')} <span className="text-blue-600 underline">{t('upload.browse')}</span>
           </p>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              folderInputRef.current?.click();
+            }}
+            className="mt-3 text-sm text-blue-600 dark:text-blue-400 underline"
+          >
+            {t('upload.browseFolder', 'Browse folder')}
+          </button>
         </div>
 
         {/* File list */}
@@ -277,25 +414,25 @@ export function UploadDialog({
                 >
                   {/* Status icon */}
                   {upload.status === 'complete' && (
-                    <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+                    <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
                   )}
                   {upload.status === 'error' && (
-                    <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                    <XCircle className="w-5 h-5 text-red-500 shrink-0" />
                   )}
                   {upload.status === 'conflict' && (
-                    <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                    <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
                   )}
                   {upload.status === 'uploading' && (
-                    <Loader2 className="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" />
+                    <Loader2 className="w-5 h-5 text-blue-500 animate-spin shrink-0" />
                   )}
                   {upload.status === 'pending' && (
-                    <File className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                    <File className="w-5 h-5 text-slate-400 shrink-0" />
                   )}
 
                   {/* File info */}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
-                      {upload.file.name}
+                      {getFileLabel(upload.file)}
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       {formatBytes(upload.file.size)}

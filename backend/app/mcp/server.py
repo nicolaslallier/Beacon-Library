@@ -141,7 +141,7 @@ class MCPServer:
         """Set up MCP protocol handlers."""
 
         @self._server.list_tools()
-        async def list_tools() -> ListToolsResult:
+        async def list_tools() -> list[Tool]:
             """List available tools."""
             tools = [
                 Tool(
@@ -244,32 +244,135 @@ class MCPServer:
                     },
                 ),
             ]
-            return ListToolsResult(tools=tools)
+            return tools
 
         @self._server.call_tool()
-        async def call_tool(name: str, arguments: dict) -> CallToolResult:
+        async def call_tool(name: str, arguments: dict):
             """Handle tool calls."""
             try:
                 if name in self._tools:
                     result = await self._tools[name](arguments)
-                    return CallToolResult(
-                        content=[TextContent(type="text", text=json.dumps(result))]
-                    )
+                    # IMPORTANT: mcp.server.Server.call_tool expects an Iterable[Content],
+                    # not a CallToolResult. The server wrapper will construct CallToolResult.
+                    return [TextContent(type="text", text=json.dumps(result))]
                 else:
-                    return CallToolResult(
-                        content=[TextContent(type="text", text=f"Unknown tool: {name}")],
-                        isError=True,
-                    )
+                    # Raise so the MCP server wrapper marks isError=True
+                    raise ValueError(f"Unknown tool: {name}")
             except Exception as e:
                 logger.error("mcp_tool_error", tool=name, error=str(e))
-                return CallToolResult(
-                    content=[TextContent(type="text", text=f"Error: {str(e)}")],
-                    isError=True,
-                )
+                # Raise so the MCP server wrapper marks isError=True
+                raise
 
     def register_tool(self, name: str, handler: Callable):
         """Register a tool handler."""
         self._tools[name] = handler
+
+    def get_tool_schema(self, name: str) -> dict:
+        """Get the schema for a tool in MCP format."""
+        # Tool schemas for the standard MCP protocol
+        schemas = {
+            "list_libraries": {
+                "name": "list_libraries",
+                "description": "List all available libraries in Beacon Library",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+            "browse_library": {
+                "name": "browse_library",
+                "description": "Browse contents of a library or directory",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "library_id": {
+                            "type": "string",
+                            "description": "UUID of the library to browse",
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Path within the library (default: /)",
+                            "default": "/",
+                        },
+                    },
+                    "required": ["library_id"],
+                },
+            },
+            "read_file": {
+                "name": "read_file",
+                "description": "Read the contents of a text file",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "file_id": {
+                            "type": "string",
+                            "description": "UUID of the file to read",
+                        },
+                    },
+                    "required": ["file_id"],
+                },
+            },
+            "search_files": {
+                "name": "search_files",
+                "description": "Search for files by name",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query string",
+                        },
+                        "library_id": {
+                            "type": "string",
+                            "description": "Optional: limit search to specific library",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+            "create_file": {
+                "name": "create_file",
+                "description": "Create a new text file in a library",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "library_id": {
+                            "type": "string",
+                            "description": "UUID of the library",
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Full path for the new file",
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "Content of the file",
+                        },
+                    },
+                    "required": ["library_id", "path", "content"],
+                },
+            },
+            "update_file": {
+                "name": "update_file",
+                "description": "Update an existing file",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "file_id": {
+                            "type": "string",
+                            "description": "UUID of the file to update",
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "New content for the file",
+                        },
+                    },
+                    "required": ["file_id", "content"],
+                },
+            },
+        }
+        return schemas.get(name, {"name": name, "description": "Unknown tool", "inputSchema": {"type": "object"}})
 
     def set_library_policy(self, policy: LibraryPolicy):
         """Set access policy for a library."""

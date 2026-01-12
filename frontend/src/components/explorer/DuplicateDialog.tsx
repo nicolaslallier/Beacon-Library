@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { AlertTriangle, File, ArrowRight } from 'lucide-react';
 
 import { cn, formatBytes, formatDate } from '../../lib/utils';
-import { DuplicateConflict, FileMetadata } from '../../services/files';
+import type { DuplicateConflict } from '../../services/files';
 
 interface DuplicateDialogProps {
   open: boolean;

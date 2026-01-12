@@ -1,0 +1,17 @@
+# ChromaDB Server Configuration
+
+# Persistence settings
+is_persistent: true
+persist_directory: /data
+
+# Disable anonymous telemetry
+anonymized_telemetry: false
+
+# Allow database reset (for development)
+allow_reset: true
+
+# OpenTelemetry tracing configuration
+chroma_otel_collection_endpoint: "http://beacon-library-alloy:4317"
+chroma_otel_service_name: "beacon-library-chromadb"
+chroma_otel_collection_headers: {}
+chroma_otel_granularity: "all"

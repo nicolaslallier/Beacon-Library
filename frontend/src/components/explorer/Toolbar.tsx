@@ -30,6 +30,11 @@ interface ToolbarProps {
   onViewModeChange: (mode: 'list' | 'grid') => void;
   onRefresh: () => void;
   onNavigateUp: () => void;
+  onUploadClick: () => void;
+  onNewFolderClick: () => void;
+  onDownloadClick: () => void;
+  onShareClick: () => void;
+  onDeleteClick: () => void;
 }
 
 interface ToolbarButtonProps {
@@ -82,14 +87,19 @@ function ToolbarSeparator() {
 }
 
 export function Toolbar({
-  libraryId,
+  libraryId: _libraryId, // Reserved for future actions
   currentPath,
-  currentDirectoryId,
+  currentDirectoryId: _currentDirectoryId, // Reserved for future actions
   selectedItems,
   viewMode,
   onViewModeChange,
   onRefresh,
   onNavigateUp,
+  onUploadClick,
+  onNewFolderClick,
+  onDownloadClick,
+  onShareClick,
+  onDeleteClick,
 }: ToolbarProps) {
   const { t } = useTranslation();
   const hasSelection = selectedItems.size > 0;
@@ -121,19 +131,13 @@ export function Toolbar({
       <ToolbarButton
         icon={<FolderPlus className="w-4 h-4" />}
         label={t('explorer.newFolder')}
-        onClick={() => {
-          // TODO: Open new folder dialog
-          console.log('New folder');
-        }}
+        onClick={onNewFolderClick}
       />
 
       <ToolbarButton
         icon={<Upload className="w-4 h-4" />}
         label={t('explorer.upload')}
-        onClick={() => {
-          // TODO: Open upload dialog
-          console.log('Upload');
-        }}
+        onClick={onUploadClick}
         variant="primary"
       />
 
@@ -143,20 +147,14 @@ export function Toolbar({
       <ToolbarButton
         icon={<Download className="w-4 h-4" />}
         label={t('explorer.download')}
-        onClick={() => {
-          // TODO: Download selected items
-          console.log('Download', selectedItems);
-        }}
+        onClick={onDownloadClick}
         disabled={!hasSelection}
       />
 
       <ToolbarButton
         icon={<Share2 className="w-4 h-4" />}
         label={t('explorer.share')}
-        onClick={() => {
-          // TODO: Open share dialog
-          console.log('Share', selectedItems);
-        }}
+        onClick={onShareClick}
         disabled={!hasSelection}
       />
 
@@ -197,10 +195,7 @@ export function Toolbar({
       <ToolbarButton
         icon={<Trash2 className="w-4 h-4" />}
         label={t('explorer.delete')}
-        onClick={() => {
-          // TODO: Delete selected items
-          console.log('Delete', selectedItems);
-        }}
+        onClick={onDeleteClick}
         disabled={!hasSelection}
         variant="danger"
       />

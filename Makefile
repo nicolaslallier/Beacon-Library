@@ -50,7 +50,7 @@ help:
 	@echo "  test-regression     Run regression/E2E tests"
 	@echo
 	@echo "${GREEN}Docker/Orchestration:${NORM}"
-	@echo "  up             Bring up full stack (compose)"
+	@echo "  up             Bring up full stack (connects to Beacon's MinIO, Keycloak, monitoring)"
 	@echo "  down           Tear down stack"
 	@echo "  restart        Restart stack"
 	@echo "  logs           Show logs"
@@ -68,10 +68,22 @@ help:
 	@echo "  observability-test-tempo      Test Tempo trace ingestion"
 	@echo "  observability-test-prometheus Test Prometheus metrics endpoint"
 	@echo
+	@echo "${GREEN}MinIO Storage:${NORM}"
+	@echo "  minio-test           Test all MinIO functionality (connection, upload, download)"
+	@echo "  minio-test-connection      Test MinIO connection"
+	@echo "  minio-test-upload          Test file upload"
+	@echo "  minio-test-download        Test file download"
+	@echo
 	@echo "${GREEN}CI/CD:${NORM}"
 	@echo "  ci             Run CI pipeline (lint, test, build)"
 	@echo "  cd             Run CD pipeline (ci, push, deploy)"
 	@echo "  deploy         Deploy to environment"
+	@echo
+	@echo "${GREEN}Admin Services:${NORM}"
+	@echo "  admin-up       Start admin services (pgAdmin, Redis Commander, ChromaDB Admin, etc.)"
+	@echo "  admin-down     Stop admin services"
+	@echo "  admin-logs     Show admin services logs"
+	@echo "  admin-status   Show admin services status and URLs"
 	@echo
 	@echo "${GREEN}Utilities:${NORM}"
 	@echo "  help           This help message with sections"
@@ -109,6 +121,8 @@ dev-frontend:
 
 up:
 	@echo "[Up] Starting stack (ENV=$(ENV))..."
+	@echo "${YELLOW}Note: Requires Beacon project running (MinIO, Keycloak, monitoring)${NORM}"
+	@echo "${YELLOW}Start Beacon first: cd ../Beacon && make up${NORM}"
 ifeq ($(ENV),local)
 	$(COMPOSE) -f docker-compose.yml -f docker-compose.local.yml up -d
 else
@@ -320,6 +334,145 @@ observability-test-all: observability-test-loki observability-test-tempo observa
 	@echo "  Loki:       {job=\"beacon-library-test\"}"
 	@echo "  Tempo:      Search for service.name = makefile-test"
 	@echo "  Prometheus: up{}"
+
+# ----------------------------------------------------------------------------
+# MinIO Storage Targets
+# ----------------------------------------------------------------------------
+.PHONY: minio-test minio-test-connection minio-test-upload minio-test-download minio-test-all
+
+# MinIO test configuration
+MINIO_TEST_IMAGE := minio/mc:latest
+MINIO_TEST_NETWORK := beacon_monitoring_net
+MINIO_ENDPOINT ?= beacon-minio1:9000
+MINIO_ACCESS_KEY ?= minioadmin
+MINIO_SECRET_KEY ?= minioadmin
+MINIO_BUCKET ?= beacon-lib-test
+
+minio-test: minio-test-all
+	@echo "${GREEN}All MinIO tests completed!${NORM}"
+
+minio-test-connection:
+	@echo "${BLUE}[Test MinIO] Testing connection...${NORM}"
+	@echo "  → Configuring mc client..."
+	@$(DOCKER) run --rm --network $(MINIO_TEST_NETWORK) --entrypoint /bin/sh $(MINIO_TEST_IMAGE) \
+		-c "mc alias set testminio http://$(MINIO_ENDPOINT) $(MINIO_ACCESS_KEY) $(MINIO_SECRET_KEY) && mc admin info testminio" \
+		&& echo "    ${GREEN}✓ MinIO connection successful${NORM}" || \
+		(echo "    ${YELLOW}✗ MinIO connection failed${NORM}"; exit 1)
+
+minio-test-upload:
+	@echo "${BLUE}[Test MinIO] Testing upload...${NORM}"
+	@echo "  → Creating test bucket if not exists..."
+	@$(DOCKER) run --rm --network $(MINIO_TEST_NETWORK) --entrypoint /bin/sh $(MINIO_TEST_IMAGE) \
+		-c "mc alias set testminio http://$(MINIO_ENDPOINT) $(MINIO_ACCESS_KEY) $(MINIO_SECRET_KEY) && \
+		    mc mb --ignore-existing testminio/$(MINIO_BUCKET)" \
+		&& echo "    ${GREEN}✓ Bucket ready${NORM}" || \
+		(echo "    ${YELLOW}✗ Failed to create bucket${NORM}"; exit 1)
+	@echo "  → Uploading test file..."
+	@$(DOCKER) run --rm --network $(MINIO_TEST_NETWORK) --entrypoint /bin/sh $(MINIO_TEST_IMAGE) \
+		-c "mc alias set testminio http://$(MINIO_ENDPOINT) $(MINIO_ACCESS_KEY) $(MINIO_SECRET_KEY) && \
+		    echo 'Test file from make minio-test at $$(date)' > /tmp/test.txt && \
+		    mc cp /tmp/test.txt testminio/$(MINIO_BUCKET)/test-$$(date +%s).txt" \
+		&& echo "    ${GREEN}✓ File uploaded successfully${NORM}" || \
+		(echo "    ${YELLOW}✗ Upload failed${NORM}"; exit 1)
+
+minio-test-download:
+	@echo "${BLUE}[Test MinIO] Testing download...${NORM}"
+	@echo "  → Listing files in bucket..."
+	@FILE_COUNT=$$($(DOCKER) run --rm --network $(MINIO_TEST_NETWORK) --entrypoint /bin/sh $(MINIO_TEST_IMAGE) \
+		-c "mc alias set testminio http://$(MINIO_ENDPOINT) $(MINIO_ACCESS_KEY) $(MINIO_SECRET_KEY) > /dev/null 2>&1 && \
+		    mc ls testminio/$(MINIO_BUCKET)/ 2>/dev/null | wc -l") && \
+		echo "    ${GREEN}✓ Found $$FILE_COUNT file(s) in bucket${NORM}"
+	@echo "  → Downloading and verifying latest test file..."
+	@$(DOCKER) run --rm --network $(MINIO_TEST_NETWORK) --entrypoint /bin/sh $(MINIO_TEST_IMAGE) \
+		-c "mc alias set testminio http://$(MINIO_ENDPOINT) $(MINIO_ACCESS_KEY) $(MINIO_SECRET_KEY) > /dev/null 2>&1 && \
+		    mc find testminio/$(MINIO_BUCKET)/ --name 'test-*.txt' | tail -1 | while read filepath; do \
+		        if [ -n \"\$$filepath\" ]; then \
+		            mc cat \"\$$filepath\" && echo && \
+		            echo '    ${GREEN}✓ File download successful${NORM}'; \
+		        fi; \
+		    done" || echo "    ${YELLOW}⚠ Download test skipped${NORM}"
+
+minio-test-all: minio-test-connection minio-test-upload minio-test-download
+	@echo
+	@echo "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NORM}"
+	@echo "${GREEN}  All MinIO storage tests passed!${NORM}"
+	@echo "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NORM}"
+	@echo
+	@echo "MinIO is ready for use:"
+	@echo "  Endpoint:   $(MINIO_ENDPOINT)"
+	@echo "  Test Bucket: $(MINIO_BUCKET)"
+	@echo "  Console:    https://minio.beacon.famillelallier.net"
+
+# ----------------------------------------------------------------------------
+# Admin Services Targets
+# ----------------------------------------------------------------------------
+.PHONY: admin-up admin-down admin-logs admin-status dev-admin
+
+admin-up:
+	@echo "[Admin] Starting admin services..."
+	@echo "${YELLOW}Starting: pgAdmin, Redis Commander, ChromaDB Admin, Ollama WebUI, Nginx Proxy Manager${NORM}"
+ifeq ($(ENV),local)
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.local.yml -f admin/docker-compose.admin.yml --profile admin up -d
+else
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.$(ENV).yml -f admin/docker-compose.admin.yml --profile admin up -d
+endif
+	@echo
+	@$(MAKE) admin-status
+
+admin-down:
+	@echo "[Admin] Stopping admin services..."
+	$(COMPOSE) -f docker-compose.yml -f admin/docker-compose.admin.yml --profile admin stop pgadmin redis-commander chromadb-admin ollama-webui nginx-proxy-manager
+	$(COMPOSE) -f docker-compose.yml -f admin/docker-compose.admin.yml --profile admin rm -f pgadmin redis-commander chromadb-admin ollama-webui nginx-proxy-manager
+
+admin-logs:
+	@echo "[Admin] Showing admin services logs..."
+	$(COMPOSE) -f docker-compose.yml -f admin/docker-compose.admin.yml logs -f pgadmin redis-commander chromadb-admin ollama-webui nginx-proxy-manager
+
+admin-status:
+	@echo
+	@echo "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NORM}"
+	@echo "${GREEN}  Admin Services Access Points${NORM}"
+	@echo "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NORM}"
+	@echo
+	@echo "${BLUE}Database Management:${NORM}"
+	@echo "  pgAdmin            http://localhost:$${PGADMIN_PORT:-5050}"
+	@echo "                     Login: admin@beacon.local / $${PGADMIN_PASSWORD:-admin}"
+	@echo
+	@echo "${BLUE}Cache Management:${NORM}"
+	@echo "  Redis Commander    http://localhost:$${REDIS_COMMANDER_PORT:-8081}"
+	@echo
+	@echo "${BLUE}Vector Database (ChromaDB):${NORM}"
+	@echo "  ChromaDB Admin     http://localhost:$${CHROMADB_ADMIN_PORT:-8083}"
+	@echo
+	@echo "${BLUE}LLM Management:${NORM}"
+	@echo "  Ollama WebUI       http://localhost:$${OLLAMA_WEBUI_PORT:-8082}"
+	@echo
+	@echo "${BLUE}Email Testing:${NORM}"
+	@echo "  MailHog UI         http://localhost:$${MAILHOG_UI_PORT:-8025}"
+	@echo
+	@echo "${BLUE}Reverse Proxy Admin:${NORM}"
+	@echo "  Nginx Proxy Mgr    http://localhost:$${NPM_ADMIN_PORT:-8888}"
+	@echo "                     Login: admin@example.com / changeme (change on first login)"
+	@echo
+	@echo "${BLUE}Document Conversion:${NORM}"
+	@echo "  Gotenberg Health   http://localhost:$${GOTENBERG_PORT:-3100}/health"
+	@echo
+	@echo "${BLUE}Admin API:${NORM}"
+	@echo "  Settings           http://localhost:8181/api/admin/settings"
+	@echo "  Services Health    http://localhost:8181/api/admin/services/health"
+	@echo "  Maintenance Stats  http://localhost:8181/api/admin/maintenance/stats"
+	@echo
+	@echo "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NORM}"
+
+dev-admin:
+	@echo "[Dev + Admin] Starting full stack with admin services..."
+ifeq ($(ENV),local)
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.local.yml -f admin/docker-compose.admin.yml --profile admin up -d
+else
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.$(ENV).yml -f admin/docker-compose.admin.yml --profile admin up -d
+endif
+	@echo
+	@$(MAKE) admin-status
 
 # ----------------------------------------------------------------------------
 # Utilities

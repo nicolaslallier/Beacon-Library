@@ -1,9 +1,8 @@
 """API routes for file management."""
 
-import hashlib
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
 import structlog
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
@@ -15,14 +14,12 @@ from app.api.deps import (
     CurrentUser,
     DbSession,
     FileDep,
-    Pagination,
     Storage,
 )
 from app.core.config import settings
 from app.models import Directory, FileMetadata, FileVersion, Library
 from app.schemas.file import (
     DuplicateConflictResponse,
-    FileMove,
     FileResponse,
     FileUpdate,
     FileVersionResponse,
@@ -30,6 +27,10 @@ from app.schemas.file import (
     UploadCompleteResponse,
     UploadInitResponse,
     UploadPartResponse,
+)
+from app.services.search import (
+    queue_file_for_deindexing,
+    queue_file_for_indexing,
 )
 from app.services.storage import StorageService
 
@@ -42,14 +43,15 @@ _active_uploads: dict = {}
 
 @router.post(
     "/upload/init",
-    response_model=UploadInitResponse,
+    response_model=Union[UploadInitResponse, DuplicateConflictResponse],
     summary="Initialize file upload",
 )
 async def init_upload(
     library_id: uuid.UUID = Query(..., description="Target library ID"),
     filename: str = Query(..., min_length=1, max_length=255),
     content_type: str = Query(default="application/octet-stream"),
-    size_bytes: int = Query(..., gt=0),
+    # Allow 0-byte files (e.g. empty config stubs like output.tf)
+    size_bytes: int = Query(..., ge=0),
     directory_id: Optional[uuid.UUID] = Query(None),
     on_duplicate: str = Query("ask", regex="^(ask|overwrite|rename)$"),
     db: DbSession = None,
@@ -67,7 +69,7 @@ async def init_upload(
     result = await db.execute(
         select(Library).where(
             Library.id == library_id,
-            Library.is_deleted == False,
+            Library.is_deleted.is_(False),
         )
     )
     library = result.scalar_one_or_none()
@@ -99,7 +101,7 @@ async def init_upload(
             select(Directory).where(
                 Directory.id == directory_id,
                 Directory.library_id == library_id,
-                Directory.is_deleted == False,
+                Directory.is_deleted.is_(False),
             )
         )
         directory = result.scalar_one_or_none()
@@ -116,7 +118,7 @@ async def init_upload(
             FileMetadata.library_id == library_id,
             FileMetadata.directory_id == directory_id,
             FileMetadata.filename == filename,
-            FileMetadata.is_deleted == False,
+            FileMetadata.is_deleted.is_(False),
         )
     )
     existing_file = result.scalar_one_or_none()
@@ -153,11 +155,20 @@ async def init_upload(
 
     # Calculate chunks
     chunk_size = settings.storage_chunk_size
-    total_chunks = (size_bytes + chunk_size - 1) // chunk_size
+    # For 0-byte files, still treat as a single "chunk".
+    if size_bytes == 0:
+        total_chunks = 1
+    else:
+        total_chunks = (size_bytes + chunk_size - 1) // chunk_size
 
     if total_chunks <= 1:
         # Small file - single upload
         upload_id = str(uuid.uuid4())
+        existing_file_id = (
+            existing_file.id
+            if existing_file and on_duplicate == "overwrite"
+            else None
+        )
         _active_uploads[upload_id] = {
             "file_id": file_id,
             "library_id": library_id,
@@ -169,7 +180,7 @@ async def init_upload(
             "bucket": library.bucket_name,
             "user_id": user.user_id,
             "dir_path": dir_path,
-            "existing_file_id": existing_file.id if existing_file and on_duplicate == "overwrite" else None,
+            "existing_file_id": existing_file_id,
             "multipart": False,
         }
 
@@ -187,6 +198,11 @@ async def init_upload(
             content_type=content_type,
         )
 
+        existing_file_id = (
+            existing_file.id
+            if existing_file and on_duplicate == "overwrite"
+            else None
+        )
         _active_uploads[upload_id] = {
             "file_id": file_id,
             "library_id": library_id,
@@ -198,7 +214,7 @@ async def init_upload(
             "bucket": library.bucket_name,
             "user_id": user.user_id,
             "dir_path": dir_path,
-            "existing_file_id": existing_file.id if existing_file and on_duplicate == "overwrite" else None,
+            "existing_file_id": existing_file_id,
             "multipart": True,
             "parts": [],
         }
@@ -293,7 +309,8 @@ async def complete_upload(
         else:
             # Single-part upload
             file_data = upload_info.get("data")
-            if not file_data:
+            # Note: empty bytes (b"") is valid for 0-byte files.
+            if file_data is None:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="No data uploaded",
@@ -325,24 +342,27 @@ async def complete_upload(
             )
             file = result.scalar_one()
 
-            # Create version record for old content
-            version = FileVersion(
-                file_id=file.id,
-                version_number=file.current_version,
-                size_bytes=file.size_bytes,
-                checksum_sha256=file.checksum_sha256,
-                storage_key=file.storage_key,
-                created_at=file.updated_at,
-                created_by=file.modified_by,
-            )
-            db.add(version)
+            # Increment version number for the new content
+            new_version_number = file.current_version + 1
 
-            # Update file
+            # Update file metadata
             file.size_bytes = size
             file.checksum_sha256 = checksum
             file.storage_key = upload_info["storage_key"]
-            file.current_version += 1
+            file.current_version = new_version_number
             file.modified_by = upload_info["user_id"]
+
+            # Create version record for new content
+            version = FileVersion(
+                file_id=file.id,
+                version_number=new_version_number,
+                size_bytes=size,
+                checksum_sha256=checksum,
+                storage_key=upload_info["storage_key"],
+                created_at=datetime.utcnow(),
+                created_by=upload_info["user_id"],
+            )
+            db.add(version)
         else:
             # Create new file
             file = FileMetadata(
@@ -388,6 +408,16 @@ async def complete_upload(
             filename=file.filename,
             size=size,
         )
+
+        # Queue file for semantic search indexing (non-blocking, don't fail upload)
+        try:
+            await queue_file_for_indexing(file.id, file.library_id)
+        except Exception as e:
+            logger.warning(
+                "search_indexing_queue_failed",
+                file_id=str(file.id),
+                error=str(e),
+            )
 
         return UploadCompleteResponse(
             file=FileResponse(
@@ -500,11 +530,26 @@ async def download_file(
         ):
             yield chunk
 
+    # Encode filename for Content-Disposition header (RFC 5987)
+    from urllib.parse import quote
+
+    # Create ASCII-safe fallback (replace non-ASCII with underscores)
+    ascii_filename = file.filename.encode(
+        'ascii', 'replace'
+    ).decode('ascii').replace('?', '_')
+    # Create UTF-8 encoded filename for modern browsers
+    utf8_filename = quote(file.filename, safe='')
+
+    content_disp = (
+        f"attachment; filename=\"{ascii_filename}\"; "
+        f"filename*=UTF-8''{utf8_filename}"
+    )
+
     return StreamingResponse(
         stream_file(),
         media_type=file.content_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{file.filename}"',
+            "Content-Disposition": content_disp,
             "Content-Length": str(file.size_bytes),
         },
     )
@@ -530,7 +575,7 @@ async def rename_file(
             FileMetadata.directory_id == file.directory_id,
             FileMetadata.filename == data.filename,
             FileMetadata.id != file.id,
-            FileMetadata.is_deleted == False,
+            FileMetadata.is_deleted.is_(False),
         )
     )
     if result.scalar_one_or_none():
@@ -569,6 +614,16 @@ async def delete_file(
     await cache.invalidate_file(file.id, file.library_id, file.directory_id)
 
     logger.info("file_deleted", file_id=str(file.id), filename=file.filename)
+
+    # Best-effort: keep vector DB in sync (don't fail delete if it errors)
+    try:
+        await queue_file_for_deindexing(file.id, file.library_id)
+    except Exception as e:
+        logger.warning(
+            "search_deindex_queue_failed",
+            file_id=str(file.id),
+            error=str(e),
+        )
 
 
 def _generate_unique_filename(filename: str) -> str:

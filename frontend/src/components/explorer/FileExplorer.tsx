@@ -5,23 +5,20 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  FolderPlus,
-  Upload,
-  Grid,
-  List,
-  RefreshCw,
-  ChevronRight,
-  Home,
-} from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { RefreshCw, ChevronRight } from 'lucide-react';
 
 import { cn } from '../../lib/utils';
-import { browseLibrary, BrowseItem, BrowseResponse } from '../../services/files';
+import { browseLibrary, downloadFile, deleteFile, deleteDirectory } from '../../services/files';
+import type { BrowseItem } from '../../services/files';
 import { TreeView } from './TreeView';
 import { FileList } from './FileList';
 import { Toolbar } from './Toolbar';
 import { Breadcrumb } from './Breadcrumb';
+import { UploadDialog } from './UploadDialog';
+import { NewFolderDialog } from './NewFolderDialog';
+import { PreviewDialog } from './PreviewDialog';
+import { ShareDialog } from './ShareDialog';
 
 interface FileExplorerProps {
   libraryId: string;
@@ -31,7 +28,6 @@ interface FileExplorerProps {
 
 export function FileExplorer({ libraryId, libraryName, className }: FileExplorerProps) {
   const { t } = useTranslation();
-  const queryClient = useQueryClient();
 
   // State
   const [currentPath, setCurrentPath] = useState('/');
@@ -41,6 +37,12 @@ export function FileExplorer({ libraryId, libraryName, className }: FileExplorer
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false);
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<BrowseItem | null>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareItem, setShareItem] = useState<BrowseItem | null>(null);
 
   // Fetch directory contents
   const {
@@ -101,10 +103,90 @@ export function FileExplorer({ libraryId, libraryName, className }: FileExplorer
     if (item.type === 'directory') {
       navigateTo(item.path, item.id);
     } else {
-      // Open file (download or preview)
-      console.log('Open file:', item);
+      // Open file preview dialog
+      setPreviewFile(item);
+      setPreviewDialogOpen(true);
     }
   }, [navigateTo]);
+
+  // Download handler
+  const handleDownload = useCallback(async () => {
+    if (selectedItems.size === 0 || !browseData?.items) return;
+
+    // Get selected file items (not directories)
+    const selectedFiles = browseData.items.filter(
+      (item) => selectedItems.has(item.id) && item.type === 'file'
+    );
+
+    if (selectedFiles.length === 0) {
+      // No files selected (only directories), nothing to download
+      return;
+    }
+
+    // Download each file
+    for (const file of selectedFiles) {
+      try {
+        const blob = await downloadFile(file.id);
+        
+        // Create a download link and trigger it
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = file.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('Download failed for file:', file.name, error);
+      }
+    }
+  }, [selectedItems, browseData?.items]);
+
+  // Share handler
+  const handleShare = useCallback(() => {
+    if (selectedItems.size === 0 || !browseData?.items) return;
+
+    // Get the first selected item for sharing
+    const selectedItem = browseData.items.find((item) => selectedItems.has(item.id));
+    if (selectedItem) {
+      setShareItem(selectedItem);
+      setShareDialogOpen(true);
+    }
+  }, [selectedItems, browseData?.items]);
+
+  // Delete handler
+  const handleDelete = useCallback(async () => {
+    if (selectedItems.size === 0 || !browseData?.items) return;
+
+    // Get selected items
+    const itemsToDelete = browseData.items.filter((item) => selectedItems.has(item.id));
+    if (itemsToDelete.length === 0) return;
+
+    // Confirm deletion
+    const itemNames = itemsToDelete.map((i) => i.name).join(', ');
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${itemsToDelete.length} item(s)?\n\n${itemNames}`
+    );
+    if (!confirmed) return;
+
+    // Delete each item
+    for (const item of itemsToDelete) {
+      try {
+        if (item.type === 'directory') {
+          await deleteDirectory(libraryId, item.id);
+        } else {
+          await deleteFile(item.id);
+        }
+      } catch (error) {
+        console.error('Delete failed for:', item.name, error);
+      }
+    }
+
+    // Clear selection and refresh
+    setSelectedItems(new Set());
+    refetch();
+  }, [selectedItems, browseData?.items, libraryId, refetch]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -153,6 +235,11 @@ export function FileExplorer({ libraryId, libraryName, className }: FileExplorer
         onViewModeChange={setViewMode}
         onRefresh={() => refetch()}
         onNavigateUp={navigateUp}
+        onUploadClick={() => setUploadDialogOpen(true)}
+        onNewFolderClick={() => setNewFolderDialogOpen(true)}
+        onDownloadClick={handleDownload}
+        onShareClick={handleShare}
+        onDeleteClick={handleDelete}
       />
 
       {/* Breadcrumb */}
@@ -251,6 +338,50 @@ export function FileExplorer({ libraryId, libraryName, className }: FileExplorer
           </span>
         )}
       </footer>
+
+      {/* Upload Dialog */}
+      <UploadDialog
+        open={uploadDialogOpen}
+        onClose={() => setUploadDialogOpen(false)}
+        libraryId={libraryId}
+        directoryId={currentDirectoryId}
+        onUploadComplete={() => {
+          refetch();
+        }}
+      />
+
+      {/* New Folder Dialog */}
+      <NewFolderDialog
+        open={newFolderDialogOpen}
+        onClose={() => setNewFolderDialogOpen(false)}
+        libraryId={libraryId}
+        parentDirectoryId={currentDirectoryId}
+        onFolderCreated={() => {
+          refetch();
+        }}
+      />
+
+      {/* Preview Dialog */}
+      <PreviewDialog
+        open={previewDialogOpen}
+        onClose={() => {
+          setPreviewDialogOpen(false);
+          setPreviewFile(null);
+        }}
+        file={previewFile}
+      />
+
+      {/* Share Dialog */}
+      <ShareDialog
+        isOpen={shareDialogOpen}
+        onClose={() => {
+          setShareDialogOpen(false);
+          setShareItem(null);
+        }}
+        targetType={shareItem?.type === 'directory' ? 'directory' : 'file'}
+        targetId={shareItem?.id || ''}
+        targetName={shareItem?.name || ''}
+      />
     </div>
   );
 }
